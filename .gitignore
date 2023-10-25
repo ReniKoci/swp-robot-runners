@@ -4,3 +4,4 @@ Dockerfile
 local
 compile.sh
 upgrade_start_kit.sh
+python/__pycache__/*
