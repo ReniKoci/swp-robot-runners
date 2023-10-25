@@ -3,3 +3,4 @@ build
 Dockerfile
 local
 compile.sh
+python/__pycache__/*
