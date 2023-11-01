@@ -1,3 +1,37 @@
+# Important commands
+## Run
+in ./build:
+```
+./lifelong --inputFile ../example_problems/random.domain/random_20.json -o test.json
+```
+
+## Visualize
+- clone PlanViz into the same directory as swp-robot-runners
+in ./build:
+```
+python3 ../../PlanViz/script/plan_viz.py --map ../example_problems/random.domain/maps/random-32-32-20.map --plan ./test.json --grid --aid --static --ca
+```
+
+# Plan for the next weeks
+1. Create a MVP:
+    - one robot walks from emitter to delivery point
+    - act as a baseline
+1. Extend the MVP from step 1 to work with multiple robots 
+    - does not have to be good as long as the robots don't crash
+1. Create a more fine garin project plan (1 page)
+1. Create the project plan presentation
+1. Write a script that 
+    - write a script that automatically runs lifelong with multiple configs (maps,...) and meassures and logs the performance
+    - --> this will enable easy evaluation 
+3. Split into smaller groups
+    - each group implements a different approach
+    - this is not a competition -> maybe we can combine different approaches at the end to reach the best result
+...
+...
+4. Final presentation and report: **14. February 2024**
+each step except the last one can be processed simultaniously by 1 to 2 persons
+
+
 # Start-Kit
 
 ## Join the competition
