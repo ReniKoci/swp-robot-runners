@@ -4,7 +4,7 @@
 ### creating lifelong 
 ```
 mkdir build
-cd buld
+cd build
 cmake ../ -DCMAKE_BUILD_TYPE=Release -DPYTHON=true
 make -j
 ```
