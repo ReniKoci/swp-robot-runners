@@ -1,6 +1,15 @@
 # Important commands
 ## Run
-in ./build:
+
+### creating lifelong 
+```
+mkdir build
+cd buld
+cmake ../ -DCMAKE_BUILD_TYPE=Release -DPYTHON=true
+make -j
+```
+
+### in ./build:
 ```
 ./lifelong --inputFile ../example_problems/random.domain/random_20.json -o test.json
 ```
