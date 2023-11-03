@@ -1,14 +1,34 @@
+# How to actually set up robot runners
+
+## Python setup
+1. create a venv with Python 3.9
+2. activate the venv
+3. `python -m pip install -r requirements.txt`
+4. `pre-commit install` to activate git hook that runs auto formatting and linting on commit
+
+## Install dependencies
+1. clone this repo
+2. Install dependencies for building lifelong
+   - [cmake >= 3.16](https://cmake.org/)
+   - [libboost >= 1.49.0](https://www.boost.org/)
+   - [pybind11](https://pybind11.readthedocs.io/en/stable/)
+
+Install dependencies on Ubuntu or Debian Linux:
+```shell
+sudo apt-get update
+sudo apt-get install build-essential libboost-all-dev python3-dev python3-pybind11 
+```
+[Homebrew](https://brew.sh/) is recomanded for installing dependencies on Mac OS.
+
+### Compiling
+1. activate the python environment
+2. Using `compile.sh`:
+```shell
+./compile.sh
+```
+
 # Important commands
 ## Run
-
-### creating lifelong 
-```
-mkdir build
-cd build
-cmake ../ -DCMAKE_BUILD_TYPE=Release -DPYTHON=true
-make -j
-```
-
 ### in ./build:
 ```
 ./lifelong --inputFile ../example_problems/random.domain/random_20.json -o test.json
@@ -16,31 +36,17 @@ make -j
 
 ## Visualize
 - clone PlanViz into the same directory as swp-robot-runners
-in ./build:
+- visualize the run with PlanViz by providing the map and the generated "log" file `test.json`:
+    - in ./build:
 ```
 python3 ../../PlanViz/script/plan_viz.py --map ../example_problems/random.domain/maps/random-32-32-20.map --plan ./test.json --grid --aid --static --ca
 ```
 
-# Plan for the next weeks
-1. Create a MVP:
-    - one robot walks from emitter to delivery point
-    - act as a baseline
-1. Extend the MVP from step 1 to work with multiple robots 
-    - does not have to be good as long as the robots don't crash
-1. Create a more fine garin project plan (1 page)
-1. Create the project plan presentation
-1. Write a script that 
-    - write a script that automatically runs lifelong with multiple configs (maps,...) and meassures and logs the performance
-    - --> this will enable easy evaluation 
-3. Split into smaller groups
-    - each group implements a different approach
-    - this is not a competition -> maybe we can combine different approaches at the end to reach the best result
-...
-...
-4. Final presentation and report: **14. February 2024**
-each step except the last one can be processed simultaniously by 1 to 2 persons
 
+---
 
+---
+Original Readme:
 # Start-Kit
 
 ## Join the competition

@@ -1,0 +1,8 @@
+MAPF
+numpy
+tk
+pybind11
+
+#development:
+pre-commit
+pylint
