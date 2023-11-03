@@ -3,5 +3,6 @@ build
 Dockerfile
 local
 compile.sh
+upgrade_start_kit.sh
 RunInDocker.sh
 python/__pycache__/*
