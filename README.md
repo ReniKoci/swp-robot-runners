@@ -1,46 +1,3 @@
-# Important commands
-## Run
-
-### creating lifelong 
-```
-mkdir build
-cd build
-cmake ../ -DCMAKE_BUILD_TYPE=Release -DPYTHON=true
-make -j
-```
-
-### in ./build:
-```
-./lifelong --inputFile ../example_problems/random.domain/random_20.json -o test.json
-```
-
-## Visualize
-- clone PlanViz into the same directory as swp-robot-runners
-in ./build:
-```
-python3 ../../PlanViz/script/plan_viz.py --map ../example_problems/random.domain/maps/random-32-32-20.map --plan ./test.json --grid --aid --static --ca
-```
-
-# Plan for the next weeks
-1. Create a MVP:
-    - one robot walks from emitter to delivery point
-    - act as a baseline
-1. Extend the MVP from step 1 to work with multiple robots 
-    - does not have to be good as long as the robots don't crash
-1. Create a more fine garin project plan (1 page)
-1. Create the project plan presentation
-1. Write a script that 
-    - write a script that automatically runs lifelong with multiple configs (maps,...) and meassures and logs the performance
-    - --> this will enable easy evaluation 
-3. Split into smaller groups
-    - each group implements a different approach
-    - this is not a competition -> maybe we can combine different approaches at the end to reach the best result
-...
-...
-4. Final presentation and report: **14. February 2024**
-each step except the last one can be processed simultaniously by 1 to 2 persons
-
-
 # Start-Kit
 
 ## Join the competition
@@ -59,7 +16,7 @@ $ cd your_submission_repo
 
 ## Compile the start-kit
 
-### Denpendencies
+### Dependencies
 
 - [cmake >= 3.16](https://cmake.org/)
 - [libboost >= 1.49.0](https://www.boost.org/)
@@ -83,26 +40,25 @@ Using `compile.sh`:
 Using cmake: 
 ```shell
 mkdir build
-cd build
-cmake ../ -DCMAKE_BUILD_TYPE=Release
-make -j
+cmake -B build ./ -DCMAKE_BUILD_TYPE=Release
+make -C build -j
 ```
 
 ## Run the start kit
 
 Running the start-kit using commands: 
 ```shell
-./lifelong --inputFile the_input_file_name -o output_file_location
+./build/lifelong --inputFile the_input_file_name -o output_file_location
 ```
 
 for example:
 ```shell
-./lifelong --inputFile ../example_problems/random.domain/random_20.json -o test.json
+./build/lifelong --inputFile ./example_problems/random.domain/random_20.json -o test.json
 ```
 
 more info on help:
 ```shell
-./lifelong --help
+./build/lifelong --help
 ```
 
 ## Windows users
@@ -123,9 +79,11 @@ If your private start-kit copy repo was created before a start-kit upgrade, you 
 
 You can check `version.txt` to know the current version of your start-kit.
 
-The `upgrade_start_kit.sh` will check which file is marked as an upgrade needed and pull those files from the start-kit.
+The `upgrade_start_kit.sh` will check which file is marked as an upgrade needed and pull those files from the start-kit. It will pull and stage the files, but not commit them. This allows you to review the changes before committing them. 
 
-The upgrade may overwrite some of your changes to `CMakeLists.txt` and `apt.txt`, you could compare the difference using `git diff` and decide whether to revert some modifications on these files.
+For files stated as unmodifiable in [Parepare_Your_Planner.md](./Prepare_Your_Planner.md), you always commit their changes.
+
+The upgrade may overwrite some of your changes to `CMakeLists.txt`, `compile.sh`, and `apt.txt`, you could compare the difference using `git diff` and decide whether to revert some modifications or partially accept changes on these files.
 
 The upgrade script will not touch any participants' created file, `python/pyMAPFPlanner.py`, `inc/MAPFPlanner.h` and `src/MAPFPlanner.cpp`. So that participants' implementations should not be influenced by the start-kit upgrade.
 
@@ -137,10 +95,11 @@ Please refer to the [Input_Output_Format.md](./Input_Output_Format.md).
 
 Please refer to the [Prepare_Your_Planner.md](./Prepare_Your_Planner.md).
 
-## Visualisation
-We provide a visualisation tool written in Python: [https://github.com/MAPF-Competition/MAPF_analysis](https://github.com/MAPF-Competition/MAPF_analysis).
+## Debug and Visualise Your Planner
+We provide a visualisation tool written in Python: [https://github.com/MAPF-Competition/PlanViz](https://github.com/MAPF-Competition/PlanViz).
+It is able to visualise the output of the start-kit program and help participants debug the implementations. 
 
-It is able to visualise the output of the start-kit program and help participants to debug the implementations.
+Please refer to the project website for more information. Also the document [Debug_and_Visualise_Your_Planner](./Debug_and_Visualise_Your_Planner.md) which provides helpful hints for interpreting and diagnosing planner output.
 
 ## Submission Instruction
 
