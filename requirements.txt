@@ -6,3 +6,4 @@ pybind11
 #development:
 pre-commit
 pylint
+black
