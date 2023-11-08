@@ -1,24 +1,37 @@
 # How to actually set up robot runners
+## Setup IDE
+1. Download Visual Studio Code or VSCodium
+    - if VSCode runs inside of a Flatpak you need to add the following into `settings.json` under `terminal.integrated.profiles.linux`:
+    ```json
+    "bash (outside flatpak)": {
+        "path": "/usr/bin/flatpak-spawn",
+        "icon": "terminal-bash",
+        "args": [
+            "--host",
+            "--env=TERM=xterm-256color",
+            "bash"
+        ]
+    },
+    ```
+2. Clone repository
 
 ## Python setup
-1. create a venv with Python 3.9
+1. create a venv with Python 3.10
 2. activate the venv
 3. `python -m pip install -r requirements.txt`
 4. `pre-commit install` to activate git hook that runs auto formatting and linting on commit
 
 ## Install dependencies
-1. clone this repo
-2. Install dependencies for building lifelong
-   - [cmake >= 3.16](https://cmake.org/)
-   - [libboost >= 1.49.0](https://www.boost.org/)
-   - [pybind11](https://pybind11.readthedocs.io/en/stable/)
-
-Install dependencies on Ubuntu or Debian Linux:
+Install dependencies on Ubuntu 22.04+ or Debian 11+:
 ```shell
 sudo apt-get update
-sudo apt-get install build-essential libboost-all-dev python3-dev python3-pybind11 
+sudo apt-get install cmake build-essential libboost-all-dev python3-dev python3-pybind11
 ```
-[Homebrew](https://brew.sh/) is recomanded for installing dependencies on Mac OS.
+Install dependencies on Fedora 38+:
+```shell
+sudo dnf install cmake boost-devel python3.10-devel pybind11-devel
+```
+For all other Linux environments it's recommended to use Distrobox.
 
 ### Compiling
 1. activate the python environment
@@ -26,6 +39,7 @@ sudo apt-get install build-essential libboost-all-dev python3-dev python3-pybind
 ```shell
 ./compile.sh
 ```
+If compiling doesn't work try deleting the build directory.
 
 # Important commands
 ## Run
