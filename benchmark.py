@@ -11,10 +11,6 @@ def compile_code():
     subprocess.run(compile_cmd, shell=True, check=True)
 
 
-def generate_filename():
-    return time.strftime("%Y%m%d_%H%M%S")
-
-
 # executing algorithm for each map
 def run_iteration(input_file):
     map_file_location = "./example_problems/" + input_file
@@ -32,6 +28,10 @@ def run_iteration(input_file):
 
     num_tasks_finished = output_data.get("numTaskFinished", "Data not found")
     return num_tasks_finished, execution_time
+
+
+def generate_filename():
+    return time.strftime("%Y%m%d_%H%M%S")
 
 
 def run_code(input_files, output_file_path):
@@ -84,7 +84,7 @@ def main():
     ]
 
     # compilation
-    # compile_code()
+    compile_code()
 
     timestamp_filename = generate_filename()
     output_file_path = f"Output/benchmark_{timestamp_filename}.json"
