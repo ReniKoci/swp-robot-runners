@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple,Set
 from queue import PriorityQueue
 import numpy as np
 
-# 0=Action.FW, 1=Action.CR, 2=Action.CCR, 3=Action.W
+#  0=Action.FW, 1=Action.CR, 2=Action.CCR, 3=Action.W
 
 class pyMAPFPlanner:
     def __init__(self, pyenv=None) -> None:
