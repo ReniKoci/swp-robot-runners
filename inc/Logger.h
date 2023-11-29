@@ -16,11 +16,8 @@ namespace keywords = boost::log::keywords;
 class Logger
 {
 public:
-    Logger(){init();};
+    Logger(std::string filename, int severity=logging::trivial::info);
     ~Logger(){};
-
-    void set_logfile(std::string filename);
-    void init();
 
     void log_info(std::string input);
     void log_info(std::string input, int timestep);
@@ -28,6 +25,9 @@ public:
     void log_fatal(std::string input, int timestep);
     void log_warning(std::string input);
     void log_warning(std::string input, int timestep);
-    // void log_preprocessing(bool succ);
-    // void log_plan(bool succ,int time);
+    void flush();
+private:
+    logging::core_ptr core;
+
+
 };
