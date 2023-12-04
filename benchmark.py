@@ -26,8 +26,17 @@ def run_iteration(input_file):
     with open("test.json", "r") as output_file:
         output_data = json.load(output_file)
 
-    num_tasks_finished = output_data.get("numTaskFinished", "Data not found")
-    return num_tasks_finished, execution_time
+    num_tasks_finished = output_data.get("numTaskFinished", "Data not found") # get number of tasks finished
+
+    # get number of tasks finished after i steps
+    event_data = output_data.get("events", "Data not found")
+    num_tasks_finished_after_i = 0
+    for eventlist in event_data:
+        for event in eventlist:
+            if (event[1] <= i and event[2] == 'finished'):
+                num_tasks_finished_after_i += 1
+    
+    return num_tasks_finished, num_task_finished_after_i, execution_time
 
 
 def generate_filename():
@@ -44,8 +53,8 @@ def run_code(input_files, output_file_path):
 
     # run code for each map
     for input_file in input_files:
-        num_task_finished, execution_time = run_iteration(input_file)
-        results.append({"file": input_file, "tasks_finished": num_task_finished, "execution_time": execution_time})
+        num_task_finished, num_task_finished_after_i, execution_time = run_iteration(input_file)
+        results.append({"file": input_file, f"tasks_finished_after_{i}": num_task_finished_after_i, "tasks_finished": num_task_finished, "execution_time": execution_time})
 
     with open(output_file_path, "a") as output_file:
         json.dump(results, output_file, indent=4)
@@ -75,6 +84,10 @@ def compare_and_update_best_benchmark(file_name):
 
 
 def main():
+    # set value for throughput after i timesteps
+    global i
+    i = 50
+
     # running using different maps
     input_files = [
         "random.domain/random_20.json",
