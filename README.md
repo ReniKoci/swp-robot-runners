@@ -55,6 +55,26 @@ If compiling doesn't work try deleting the build directory.
 ```
 python3 ../../PlanViz/script/plan_viz.py --map ../example_problems/random.domain/maps/random-32-32-20.map --plan ./test.json --grid --aid --static --ca
 ```
+## Debug
+It is not that easy to debug our Python MapfPlanner since it is called each second by the compiled c++ scirpt. Hence we need a remote-debugging server.
+
+`import debugpy`
+
+Add the following lines:
+```python
+# to wait for debugger connection:
+debugpy.listen(('localhost', 5678))
+print("Waiting for debugger attach")
+debugpy.wait_for_client()
+```
+1. call `python3 benchmark.py` or any other thing that calls our planner.
+1. In VsCode (while having pyMAPFPlanner.py open):
+    1. Click on the Debug-Button
+    1. Click "Run and Debug"
+    1. Click "Remote Attach"
+    1. Enter localhost as IP
+    1. Enter 5678 as Port
+1. start debugging :)
 
 
 ---
