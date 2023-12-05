@@ -195,7 +195,7 @@ bool MAPFPlanner::hasConflict(const list<pair<int,int>> &path1, const list<pair<
 
 
 // Returns true if there is an edge conflict between two routes in first n steps
-bool MAPFPlanner::hasEdgeConflict(list<pair<int,int>> &path1, const list<pair<int,int>> &path2){
+bool MAPFPlanner::hasEdgeConflict(const list<pair<int,int>> &path1, const list<pair<int,int>> &path2){
      min_index = std::min(std::min(n, path1.size()), path2.size()) - 1;
      for (int i = 0; i < min_index; i++) {
         if (path1[i]==path2[i+1] && path1[i+1]=path2[i])
