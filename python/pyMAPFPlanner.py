@@ -1,15 +1,39 @@
 import MAPF
-
-from typing import Dict, List, Tuple,Set
+import debugpy
+from typing import Dict, List, Tuple, Set
 from queue import PriorityQueue
 import numpy as np
+from enum import Enum
 
-#  0=Action.FW, 1=Action.CR, 2=Action.CCR, 3=Action.W
+
+class Action(Enum):
+    FW = 0
+    CR = 1
+    CCR = 2
+    W = 3
+
+
+class State: # state of an agent
+    location: int
+    orientation: int
+    timestep: int
+
+
+class Env:
+    cols: int # number of columns
+    rows: int # number of rows
+    map: list[int] # 0 - empty; 1 - wall (agents do not affect the status)
+    map_name: str
+    num_of_agents: int
+    curr_timestep: int
+    curr_states: list[State] # position and orientation of each agent
+    goal_location: list[tuple[int, int]] # goal of each agent, timestep when the target was revealed
+
 
 class pyMAPFPlanner:
     def __init__(self, pyenv=None) -> None:
         if pyenv is not None:
-            self.env = pyenv.env
+            self.env: Env = pyenv.env
 
         print("pyMAPFPlanner created!  python debug")
 
@@ -254,7 +278,9 @@ class pyMAPFPlanner:
                         reservation.add((last_loc, p[0], t))
                     last_loc = p[0]
                     t += 1
-
+        debugpy.listen(('localhost', 5678))
+        print("Waiting for debugger attach")
+        debugpy.wait_for_client()
         return actions
 
 
