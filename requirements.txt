@@ -7,3 +7,4 @@ pybind11
 pre-commit
 pylint
 black
+pydebug

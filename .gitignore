@@ -1,6 +1,9 @@
 build
 .vscode
 Dockerfile
+venv
+.end
+test.json
 local
 compile.sh
 upgrade_start_kit.sh
