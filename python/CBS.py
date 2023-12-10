@@ -21,6 +21,13 @@ class Conflict:
         self.vertex_2=v_2
         self.time = t
 
+# A constraint is a tuple (a_i, v, t) where agent a_i is prohibited from occupying vertex v at time step t.
+class Constraint:
+    def __init__(self, a_i, v, t ):
+        self.agent_id = a_i
+        self.position = v
+        self.time = t
+
 #Tree Node
 
 class TreeNode:
@@ -124,7 +131,7 @@ class HighLevelSolver:  #CBS High Level
     
                     
     # Look for the first vertex or edge conflict (in first n time steps) 
-    # for a_1, a_2, a_3 and so on
+    # surch for a_1, a_2, a_3 and so on
 
     @dispatch(TreeNode, int)
     def getConflict(node: TreeNode, n):
