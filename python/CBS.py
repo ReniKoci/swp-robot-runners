@@ -33,8 +33,10 @@ class Constraint:
 class TreeNode:
     def __init__(self):
         self.constraints= []   # List of constraints. A constraint is a tuple (a_i,v,t) where agent a_i is prohibited from occupying v at time step t.
-        self.solution=[]      # A set of k paths, one for each agent. The path for agent must be consistent with the constraints of a_i
+        self.solution=[]       # A set of k paths, one for each agent. The path for agent must be consistent with the constraints of a_i
         self.cost=0            # The total cost of the current solution.
+        self.left = None
+        self.right = None
 
     def getSolution(self):
         return self.solution
