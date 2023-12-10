@@ -55,7 +55,19 @@ class TreeNode:
         self.cost = new_cost
 
     # def updateSolution(self):    LowLevelSolver
-   
+
+
+# constraint tree
+class CTree:
+    def __init__(self):
+        self.root= None
+    
+    # def insert(self):
+
+    
+
+
+
 class HighLevelSolver:  #CBS High Level
     
     # Returns true if there is a conflict between two given routes (in first n time steps) 
