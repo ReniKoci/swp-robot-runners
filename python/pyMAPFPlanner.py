@@ -1,35 +1,7 @@
-import MAPF
-import debugpy
-from typing import Dict, List, Tuple, Set
+from typing import List, Tuple, Set
 from queue import PriorityQueue
-import numpy as np
-from enum import Enum
-
-
-class Action(Enum):
-    FW = 0
-    CR = 1
-    CCR = 2
-    W = 3
-
-
-class State:  # state of an agent
-    location: int
-    orientation: int
-    timestep: int
-
-
-class Env:
-    cols: int  # number of columns
-    rows: int  # number of rows
-    map: list[int]  # 0 - empty; 1 - wall (agents do not affect the status)
-    map_name: str
-    num_of_agents: int
-    curr_timestep: int
-    curr_states: list[State]  # position and orientation of each agent
-    goal_location: list[
-        tuple[int, int]
-    ]  # goal of each agent, timestep when the target was revealed
+from python.models import Env, Action
+from python.util import getManhattanDistance, get_neighbors
 
 
 class pyMAPFPlanner:
@@ -67,190 +39,82 @@ class pyMAPFPlanner:
         # print("env.rows=",self.env.rows,"env.cols=",self.env.cols,"env.map=",self.env.map)
         # raise NotImplementedError("YOU NEED TO IMPLEMENT THE PYMAPFPLANNER!")
 
-    def naive_a_star(self, time_limit):
-        print("I am planning")
-        actions = [MAPF.Action.W for i in range(len(self.env.curr_states))]
-        for i in range(0, self.env.num_of_agents):
-            print("python start plan for agent ", i, end=" ")
-            path = []
-            if len(self.env.goal_locations[i]) == 0:
-                print(i, " does not have any goal left", end=" ")
-                path.append(
-                    (
-                        self.env.curr_states[i].location,
-                        self.env.curr_states[i].orientation,
-                    )
-                )
-            else:
-                print(" with start and goal: ", end=" ")
-                path = self.single_agent_plan(
-                    self.env.curr_states[i].location,
-                    self.env.curr_states[i].orientation,
-                    self.env.goal_locations[i][0][0],
-                )
-
-            print("current location:", path[0][0], "current direction: ", path[0][1])
-            if path[0][0] != self.env.curr_states[i].location:
-                actions[i] = MAPF.Action.FW
-            elif path[0][1] != self.env.curr_states[i].orientation:
-                incr = path[0][1] - self.env.curr_states[i].orientation
-                if incr == 1 or incr == -3:
-                    actions[i] = MAPF.Action.CR
-                elif incr == -1 or incr == 3:
-                    actions[i] = MAPF.Action.CCR
-        # print(actions)
-        actions = [int(a) for a in actions]
-        # print(actions)
-        return np.array(actions, dtype=int)
-
-    def single_agent_plan(self, start: int, start_direct: int, end: int):
-        print(start, start_direct, end)
-        path = []
-        # AStarNode (u,dir,t,f)
-        open_list = PriorityQueue()
-        s = (start, start_direct, 0, self.getManhattanDistance(start, end))
-        open_list.put([0, s])
-        all_nodes = dict()
-        close_list = set()
-        parent = {(start, start_direct): None}
-        all_nodes[start * 4 + start_direct] = s
-        while not open_list.empty():
-            curr = (open_list.get())[1]
-            close_list.add(curr[0] * 4 + curr[1])
-            if curr[0] == end:
-                curr = (curr[0], curr[1])
-                while curr != None:
-                    path.append(curr)
-                    curr = parent[curr]
-                path.pop()
-                path.reverse()
-
-                break
-            neighbors = self.getNeighbors(curr[0], curr[1])
-            # print("neighbors=",neighbors)
-            for neighbor in neighbors:
-                if (neighbor[0] * 4 + neighbor[1]) in close_list:
-                    continue
-                next_node = (
-                    neighbor[0],
-                    neighbor[1],
-                    curr[2] + 1,
-                    self.getManhattanDistance(neighbor[0], end),
-                )
-                parent[(next_node[0], next_node[1])] = (curr[0], curr[1])
-                open_list.put([next_node[3] + next_node[2], next_node])
-        print(path)
-        return path
-
-    def getManhattanDistance(self, loc1: int, loc2: int) -> int:
-        loc1_x = loc1 // self.env.cols
-        loc1_y = loc1 % self.env.cols
-        loc2_x = loc2 // self.env.cols
-        loc2_y = loc2 % self.env.cols
-        return abs(loc1_x - loc2_x) + abs(loc1_y - loc2_y)
-
-    def validateMove(self, loc: int, loc2: int) -> bool:
-        loc_x = loc // self.env.cols
-        loc_y = loc % self.env.cols
-        if loc_x >= self.env.rows or loc_y >= self.env.cols or self.env.map[loc] == 1:
-            return False
-        loc2_x = loc2 // self.env.cols
-        loc2_y = loc2 % self.env.cols
-        if abs(loc_x - loc2_x) + abs(loc_y - loc2_y) > 1:
-            return False
-        return True
-
-    def getNeighbors(self, location: int, direction: int):
-        neighbors = []
-        # forward
-        candidates = [
-            location + 1,
-            location + self.env.cols,
-            location - 1,
-            location - self.env.cols,
-        ]
-        forward = candidates[direction]
-        new_direction = direction
-        if (
-            forward >= 0
-            and forward < len(self.env.map)
-            and self.validateMove(forward, location)
-        ):
-            neighbors.append((forward, new_direction))
-        # turn left
-        new_direction = direction - 1
-        if new_direction == -1:
-            new_direction = 3
-        neighbors.append((location, new_direction))
-        # turn right
-        new_direction = direction + 1
-        if new_direction == 4:
-            new_direction = 0
-        neighbors.append((location, new_direction))
-        # print("debug!!!!!!!", neighbors)
-        return neighbors
-
     def space_time_plan(
-        self,
-        start: int,
-        start_direct: int,
-        end: int,
-        reservation: Set[Tuple[int, int, int]],
+            self,
+            start: int,
+            start_direct: int,
+            end: int,
+            reservation: Set[Tuple[int, int, int]],
     ) -> List[Tuple[int, int]]:
+        """
+        finds the shortest path
+        :param start: the start cell index
+        :param start_direct: the orientation of the robot
+        :param end: the target cell index
+        :param reservation: the reservation table
+        :return: the shortest path if it exists - list of (node index, orientation) tuples
+        """
         print(start, start_direct, end)
         path = []
-        open_list = PriorityQueue()
+        open_list = PriorityQueue()  # list of all cells to look at
         all_nodes = {}  # loc+dict, t
         parent = {}
-        s = (start, start_direct, 0, self.getManhattanDistance(start, end))
-        open_list.put((s[3], id(s), s))
+        s = (start, start_direct, 0,
+             getManhattanDistance(self.env, start, end))  # node info: start, orientation, g or time step?, f
+        open_list.put((s[3], id(s), s))  # heuristic value, unique id, node info
         # all_nodes[(start * 4 + start_direct, 0)] = s
-        parent[(start * 4 + start_direct, 0)] = None
+        parent[(start * 4 + start_direct, 0)] = None  # safe the parent node; key: position hash, distance from start
+        # why start * 4 + start_direct ?
+        # because: this results in a unique hash of the postion/orientation (4 orientations -> if orientation changes: at least +1; if cell changes: at least +4)
+        # this is a hash that is used to check if a position/orientation-combination was already looked at
 
-        while not open_list.empty():
-            n = open_list.get()
+        while not open_list.empty():  # look at all cells in the open list
+            n = open_list.get()  # get the node with the lowest f value
             # print("n=",n)
             _, _, curr = n
 
             curr_location, curr_direction, curr_g, _ = curr
 
             if (curr_location * 4 + curr_direction, curr_g) in all_nodes:
-                continue
+                continue  # skip if this node was already looked at
             all_nodes[(curr_location * 4 + curr_direction, curr_g)] = curr
             if curr_location == end:
                 while True:
-                    path.append((curr[0], curr[1]))
-                    curr = parent[(curr[0] * 4 + curr[1], curr[2])]
+                    path.append((curr[0], curr[1]))  # append position, orientation to path
+                    curr = parent[(curr[0] * 4 + curr[1], curr[
+                        2])]  # previous node is the parent -> get parent by position hash, g (dist from start)
                     if curr is None:
-                        break
+                        break  # start was reached
                     # curr = curr[5]
                 path.pop()
                 path.reverse()
                 break
 
-            neighbors = self.getNeighbors(curr_location, curr_direction)
+            neighbors = get_neighbors(self.env, curr_location, curr_direction)
 
             for neighbor in neighbors:
+                # it's not really the neighbor we are checking, it is more the next possible position+orientation
                 neighbor_location, neighbor_direction = neighbor
 
                 if (neighbor_location, -1, curr[2] + 1) in reservation:
-                    continue
+                    continue  # the edge neighbor_location --to--> neighbor_location is already reserved in the next timestep
 
                 if (neighbor_location, curr_location, curr[2] + 1) in reservation:
-                    continue
+                    continue  # the edge neighbor_location --to--> current_location is already reserved in the next timestep
+                # todo: shouldn't we also check if the neighbor location is reserved at all (also from different directions)
 
                 neighbor_key = (neighbor_location * 4 + neighbor_direction, curr[2] + 1)
 
                 if neighbor_key in all_nodes:
                     old = all_nodes[neighbor_key]
-                    if curr_g + 1 < old[2]:
-                        old = (old[0], old[1], curr_g + 1, old[3], old[4])
+                    if curr_g + 1 < old[2]:  # the neighbor was already visited, but we found a shorter route
+                        old = (old[0], old[1], curr_g + 1, old[3], old[4])  # todo: old is not updated correctly!?
                 else:
                     next_node = (
                         neighbor_location,
                         neighbor_direction,
                         curr_g + 1,
-                        self.getManhattanDistance(neighbor_location, end),
+                        getManhattanDistance(self.env, neighbor_location, end),
                     )
 
                     open_list.put(
@@ -267,7 +131,7 @@ class pyMAPFPlanner:
         return path
 
     def sample_priority_planner(self, time_limit: int):
-        actions = [MAPF.Action.W] * len(self.env.curr_states)
+        actions = [Action.W.value] * len(self.env.curr_states)
         reservation = set()  # loc1, loc2, t
 
         for i in range(self.env.num_of_agents):
@@ -288,7 +152,7 @@ class pyMAPFPlanner:
             path = []
             if self.env.goal_locations[i]:
                 print("with start and goal:")
-                path = self.space_time_plan(
+                path = self.space_time_plan(  # get the shortest possible path
                     self.env.curr_states[i].location,
                     self.env.curr_states[i].orientation,
                     self.env.goal_locations[i][0][0],
@@ -298,13 +162,13 @@ class pyMAPFPlanner:
             if path:
                 print("current location:", path[0][0], "current direction:", path[0][1])
                 if path[0][0] != self.env.curr_states[i].location:
-                    actions[i] = MAPF.Action.FW
+                    actions[i] = Action.FW.value
                 elif path[0][1] != self.env.curr_states[i].orientation:
                     incr = path[0][1] - self.env.curr_states[i].orientation
                     if incr == 1 or incr == -3:
-                        actions[i] = MAPF.Action.CR
+                        actions[i] = Action.CR.value
                     elif incr == -1 or incr == 3:
-                        actions[i] = MAPF.Action.CCR
+                        actions[i] = Action.CCR.value
 
                 last_loc = -1
                 t = 1
