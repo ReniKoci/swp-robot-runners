@@ -15,28 +15,24 @@ def compile_code():
 def run_iteration(input_file):
     map_file_location = "./example_problems/" + input_file
 
+    if (i):
+        run_cmd = f"./build/lifelong --inputFile {map_file_location} -o test.json --simulationTime {i}"
+    else:
+        run_cmd = f"./build/lifelong --inputFile {map_file_location} -o test.json"
+        
     # start execution time
     start_time = time.time()
-    run_cmd = f"./build/lifelong --inputFile {map_file_location} -o test.json"
     subprocess.run(run_cmd, shell=True, check=True)
-    # end execution time
     execution_time = time.time() - start_time
-
+    # end execution time
+        
     # get the output file and read data
     with open("test.json", "r") as output_file:
         output_data = json.load(output_file)
 
     num_tasks_finished = output_data.get("numTaskFinished", "Data not found") # get number of tasks finished
-
-    # get number of tasks finished after i steps
-    event_data = output_data.get("events", "Data not found")
-    num_tasks_finished_after_i = 0
-    for eventlist in event_data:
-        for event in eventlist:
-            if (event[1] <= i and event[2] == 'finished'):
-                num_tasks_finished_after_i += 1
     
-    return num_tasks_finished, num_task_finished_after_i, execution_time
+    return num_tasks_finished, execution_time
 
 
 def generate_filename():
@@ -53,8 +49,8 @@ def run_code(input_files, output_file_path):
 
     # run code for each map
     for input_file in input_files:
-        num_task_finished, num_task_finished_after_i, execution_time = run_iteration(input_file)
-        results.append({"file": input_file, f"tasks_finished_after_{i}": num_task_finished_after_i, "tasks_finished": num_task_finished, "execution_time": execution_time})
+        num_task_finished, execution_time = run_iteration(input_file)
+        results.append({"file": input_file, "timesteps_taken":i, "tasks_finished": num_task_finished, "execution_time": execution_time})
 
     with open(output_file_path, "a") as output_file:
         json.dump(results, output_file, indent=4)
@@ -67,6 +63,13 @@ def get_total_tasks_finished(file_name):
     total_tasks_finished = sum(entry.get("tasks_finished", 0) for entry in data)
     return total_tasks_finished
 
+def get_timesteps_taken(file_name):
+    with open(file_name, "r") as file:
+        data = json.load(file)
+
+    timesteps_taken = sum(entry.get("timesteps_taken", 0) for entry in data)
+    return timesteps_taken
+
 
 def compare_and_update_best_benchmark(file_name):
     # if the best benchmark file does not exist, create it
@@ -76,17 +79,24 @@ def compare_and_update_best_benchmark(file_name):
 
     # get the current number of tasks finished
     current_benchmark_tasks_finished = get_total_tasks_finished(file_name)
+    current_benchmark_timesteps_taken = i
     best_benchmark_tasks_finished = get_total_tasks_finished("best_benchmark.json")
+    best_benchmark_timesteps_taken = get_timesteps_taken("best_benchmark.json")
 
-    if current_benchmark_tasks_finished > best_benchmark_tasks_finished:
+    if (current_benchmark_tasks_finished/current_benchmark_timesteps_taken) > (best_benchmark_tasks_finished/best_benchmark_timesteps_taken):
         shutil.copy(file_name, "best_benchmark.json")
         print("Better benchmark found!")
 
+def get_timesteps():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--simulationTime", type=int)
+    args = parser.parse_args()
+    return args.simulationTime
 
 def main():
     # set value for throughput after i timesteps
     global i
-    i = 50
+    i = get_timesteps()
 
     # running using different maps
     input_files = [
