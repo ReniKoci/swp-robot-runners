@@ -99,15 +99,15 @@ def print_grid(env: Env):
 
 class PlannerTest(unittest.TestCase):
     def get_test_env(self) -> Env:
-        grid = [
+        grid = [  # 0 - empty; 1 - wall; "<i><o>" i - robot nr (has to be bigger than 0) o - orientation (<>v^)
             [0, 0, 0, 0],
             [0, "1>", 0, 0],
             [0, 1, 0, 0],
             [0, 1, 0, 0],
         ]
         goal_grid = [
-            [0, 0, 0, 0],
-            [0, 0, 0, 1],
+            [0, 0, 0, 0],  # 0 - empty; 1-infinity - goal of robot 1 - inf
+            [0, 0, 0, 1],  # goal of robot 1 (goals have to be the robot
             [0, 0, 0, 0],
             [0, 0, 0, 0],
         ]
@@ -126,9 +126,36 @@ class PlannerTest(unittest.TestCase):
         planner.env = env = self.get_test_env()
         print_grid(env)
         actions = planner.plan(None)
-        new_env = update_env(env, actions)
-        print_grid(new_env)
+        env = update_env(env, actions)
+        print_grid(env)
         self.assertEqual(actions[0], Action.FW.value)
+        actions = planner.plan(None)
+        env = update_env(env, actions)
+        print_grid(env)
+
+    def test_basic_planning_two_robots(self):
+        grid = [
+            [0000, 0, 0000, 0],
+            ["1>", 0, "2<", 0],
+            [0000, 0, 0000, 0]
+        ]
+        goal_grid = [
+            [0, 0, 0, 0],
+            [2, 0, 0, 1],
+            [0, 0, 0, 0]
+        ]
+        env = grids_to_env(grid, goal_grid)
+        planner = SpaceTimeAStarPlanner()
+        planner.env = env
+
+        print_grid(env)
+        actions = planner.plan(None)
+        env = update_env(env, actions)
+        print_grid(env)
+        self.assertEqual(actions[0], Action.FW.value)
+        actions = planner.plan(None)
+        env = update_env(env, actions)
+        print_grid(env)
 
     def test_avoid_edge_collision(self):
         # todo fix this!
