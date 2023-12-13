@@ -57,7 +57,7 @@ python3 ../../PlanViz/script/plan_viz.py --map ../example_problems/random.domain
 ```
 ## Debug
 It is not that easy to debug our Python MapfPlanner since it is called each second by the compiled c++ scirpt. Hence we need a remote-debugging server.
-
+### VS Code
 `import debugpy`
 
 Add the following lines:
@@ -76,7 +76,13 @@ debugpy.wait_for_client()
     1. Enter 5678 as Port
 1. start debugging :)
 
-
+### IntelliJ
+- Follow these steps from the IntellJ documentation, ignore all the other steps:
+  - [Create a run/debug configuration](https://www.jetbrains.com/help/idea/remote-debugging-with-product.html#create-remote-debug-config)
+  - [Launch the Debug Server](https://www.jetbrains.com/help/idea/remote-debugging-with-product.html#launch-debug-server)
+#### TLDR:
+- `import pydevd_pycharm`
+- Add line: `pydevd_pycharm.settrace('localhost', port=12345, stdoutToServer=True, stderrToServer=True)`
 ---
 
 ---

@@ -3,6 +3,8 @@ import json
 import os
 import time
 import shutil
+import argparse
+import signal
 
 
 # compilation
@@ -74,17 +76,26 @@ def compare_and_update_best_benchmark(file_name):
         print("Better benchmark found!")
 
 
-def main():
+def main(args):
+    # signal to program to finish if a running time has been specified
+    if args.sec is not None:
+        def handler(sig, frame):
+            raise TimeoutError("Time limti reached")
+
+        signal.signal(signal.SIGALRM, handler)
+        signal.alarm(args.sec)
+
     # running using different maps
     input_files = [
         "random.domain/random_20.json",
-        "random.domain/random_50.json",
+        # "random.domain/random_50.json",
         # "random_100.json",
         # "random_200.json"
     ]
 
     # compilation
-    compile_code()
+    if args.rebuild:
+        compile_code()
 
     timestamp_filename = generate_filename()
     output_file_path = f"Output/benchmark_{timestamp_filename}.json"
@@ -97,4 +108,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    argParser = argparse.ArgumentParser()
+    argParser.add_argument("sec", type=int, nargs="?", default=None, help="Number of seconds to run the program")
+    argParser.add_argument("--rebuild", action="store_true", help="Specify when rebuilding program")
+
+    args = argParser.parse_args()
+    main(args)
