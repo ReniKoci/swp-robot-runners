@@ -1,7 +1,8 @@
 import unittest
 from typing import Union
+
+from python.planner_space_time_a_star import SpaceTimeAStarPlanner
 from python.util import get_neighbors
-from python.pyMAPFPlanner import pyMAPFPlanner
 from python.models import Env, State, Orientation, Action
 
 
@@ -99,7 +100,7 @@ def print_grid(env: Env):
 class PlannerTest(unittest.TestCase):
     def get_test_env(self) -> Env:
         grid = [
-            [0, 0000, 0, 0],
+            [0, 0, 0, 0],
             [0, "1>", 0, 0],
             [0, 1, 0, 0],
             [0, 1, 0, 0],
@@ -121,12 +122,12 @@ class PlannerTest(unittest.TestCase):
         self.assertListEqual(neighbors, [(6, 0), (5, 3), (5, 1)])
 
     def test_basic_planning_one_step(self):
-        planner = pyMAPFPlanner()
+        planner = SpaceTimeAStarPlanner()
         planner.env = env = self.get_test_env()
         print_grid(env)
         actions = planner.plan(None)
         new_env = update_env(env, actions)
-        print_grid(env)
+        print_grid(new_env)
         self.assertEqual(actions[0], Action.FW.value)
 
     def test_avoid_edge_collision(self):
@@ -138,12 +139,15 @@ class PlannerTest(unittest.TestCase):
             [2, 1]
         ]
         env = grids_to_env(grid, goal_grid)
-        planner = pyMAPFPlanner()
+        planner = SpaceTimeAStarPlanner()
         planner.env = env
         actions = planner.plan(None)
+        print(actions)
+        print(Action(actions[0]), Action(actions[1]))
         self.assertListEqual(actions, [Action.W.value, Action.W.value])
 
     def test_avoid_cell_collision(self):
+        # todo: why dont they move?
         grid = [
             ["1>", 0, "2<"]
         ]
@@ -151,7 +155,7 @@ class PlannerTest(unittest.TestCase):
             [2, 0, 1]
         ]
         env = grids_to_env(grid, goal_grid)
-        planner = pyMAPFPlanner()
+        planner = SpaceTimeAStarPlanner()
         planner.env = env
         actions = planner.plan(None)
         print([Action(a) for a in actions])

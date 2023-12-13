@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 
@@ -35,3 +36,28 @@ class Env:
     goal_locations: list[
         [tuple[int, int]]
     ]  # goal of each agent, timestep when the target was revealed
+
+
+class BasePlanner:
+    env: Env
+    name: str
+
+    def __init__(self, pyenv=None, name="My Planner") -> None:
+        self.name = name
+        if pyenv is not None:
+            self.env: Env = pyenv.env
+
+    @abstractmethod
+    def initialize(self, preprocess_time_limit: int):
+        """
+        :param preprocess_time_limit: limit to preprocess in seconds(?)
+        """
+
+    @abstractmethod
+    def plan(self, time_limit) -> list[int]:
+        """
+
+        :param time_limit: time limit until the next actions have to be returned
+        :return: list of actions
+        """
+
