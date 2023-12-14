@@ -17,7 +17,6 @@ def grids_to_env(grid: list[list[Union[int, str]]], goal_grid: list[list[int]]) 
     for i, cell in enumerate(one_d_map):
         if type(cell) == str:
             # it is a robot
-            print(cell)
             robot_nr: int = int(cell[0]) - 1
             last_char = cell[-1]
             char_to_orientation_map = {
@@ -158,7 +157,6 @@ class PlannerTest(unittest.TestCase):
         print_grid(env)
 
     def test_avoid_edge_collision(self):
-        # todo fix this!
         grid = [
             ["1>", "2<"]
         ]
@@ -169,12 +167,9 @@ class PlannerTest(unittest.TestCase):
         planner = SpaceTimeAStarPlanner()
         planner.env = env
         actions = planner.plan(None)
-        print(actions)
-        print(Action(actions[0]), Action(actions[1]))
         self.assertListEqual(actions, [Action.W.value, Action.W.value])
 
     def test_avoid_cell_collision(self):
-        # todo: why dont they move?
         grid = [
             ["1>", 0, "2<"]
         ]
@@ -185,5 +180,4 @@ class PlannerTest(unittest.TestCase):
         planner = SpaceTimeAStarPlanner()
         planner.env = env
         actions = planner.plan(None)
-        print([Action(a) for a in actions])
         self.assertNotEquals(actions, [Action.W.value, Action.W.value])
