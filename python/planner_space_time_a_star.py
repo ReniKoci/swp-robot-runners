@@ -1,7 +1,13 @@
+import math
 from typing import List, Tuple, Set
 from queue import PriorityQueue
-from python.models import Env, Action, BasePlanner
+
+from python.models import Action, BasePlanner
 from python.util import getManhattanDistance, get_neighbors
+import numpy as np
+
+from python.visualization_a_star import animate_combined, visualize_grid_with_lowest_g, visualize_explored_count, \
+    animate_combined_v2
 
 
 class SpaceTimeAStarPlanner(BasePlanner):
@@ -12,10 +18,12 @@ class SpaceTimeAStarPlanner(BasePlanner):
     next_actions = list[int]
     # next action for each robot
     time_step = 0
+
     # current time step
 
-    def __init__(self, pyenv=None) -> None:
+    def __init__(self, pyenv=None, visualize=False) -> None:
         super().__init__(pyenv, "Space-Time-A-Star-Planner")
+        self.VISUALIZE = visualize
         print(f"{self.name} created")
 
     def initialize(self, preprocess_time_limit: int):
@@ -41,67 +49,153 @@ class SpaceTimeAStarPlanner(BasePlanner):
         open_list = PriorityQueue()  # list of all cells to look at
         all_nodes = {}  # loc+dict, t
         parent = {}
-        s = (start, start_direct, 0,
-             getManhattanDistance(self.env, start, end))  # node info: start, orientation, g or time step?, f
-        open_list.put((s[3], id(s), s))  # heuristic value, unique id, node info
+
+        if self.VISUALIZE:
+            open_list_visualization_data = []  # Data for visualization
+            explored_counts = {}
+            explored_counts_list = [{}]
+            grid_data = []
+            grid_data_v2 = []
+            current_frame_data_v2 = {}
+            min_f_values_v2 = {}
+            lowest_g_values = {}
+            lowest_f_values = {}
+
+        h = getManhattanDistance(self.env, start, end)  # heuristic approximation
+        g = 0  # distance traveled
+        node_info = (start, start_direct, g, h)
+        open_list.put((g + h, id(node_info), node_info))
         # all_nodes[(start * 4 + start_direct, 0)] = s
-        parent[(start * 4 + start_direct, 0)] = None  # safe the parent node; key: position hash, distance from start
+        position_direction_hash = start * 4 + start_direct
         # why start * 4 + start_direct ?
         # because: this results in a unique hash of the postion/orientation (4 orientations -> if orientation changes: at least +1; if cell changes: at least +4)
         # this is a hash that is used to check if a position/orientation-combination was already looked at
+        parent[(position_direction_hash, g)] = None  # safe the parent node
 
         while not open_list.empty():  # look at all cells in the open list
-            n = open_list.get()  # get the node with the lowest f value
-            _, _, curr = n
-            current_time_step = curr[2]
+            if self.VISUALIZE:
+                open_list_visualization_data.append([(n[2][0], n[2][2]) for n in open_list.queue])
+                current_frame_data = {}
+                current_f_values = {}
+                current_f_values_v2 = {}
+
+            node = open_list.get()  # get the node with the lowest f value
+            h, node_id, current_node_info = node
+            position, orientation, g, h = current_node_info
+            current_time_step = g  # it is the same, when planning was started in time_step 0
             next_time_step = current_time_step + 1
 
-            curr_location, curr_direction, curr_g, _ = curr
+            if self.VISUALIZE:
+                explored_counts[position] = explored_counts.get(position, 0) + 1
+                explored_counts_list.append(explored_counts.copy())
+                # Update explored counts and lowest g values
+                if position not in lowest_g_values or g < lowest_g_values[position]:
+                    lowest_g_values[position] = g
+                # Mark the current cell
+                current_frame_data[position] = {'current': True}
 
-            if (curr_location * 4 + curr_direction, curr_g) in all_nodes:
-                continue  # skip if this node was already looked at
-            all_nodes[(curr_location * 4 + curr_direction, curr_g)] = curr
-            if curr_location == end:
-                while True:
-                    path.append((curr[0], curr[1]))  # append position, orientation to path
-                    curr = parent[(curr[0] * 4 + curr[1], curr[2])]  # previous node is the parent -> get parent by position hash, g (dist from start)
-                    if curr is None:
-                        break  # start node was reached
-                path.pop()
+            if (position * 4 + orientation, g) in all_nodes:
+                continue  # skip if this node was already looked at - at the current time step
+            all_nodes[(position * 4 + orientation, g)] = current_node_info
+            if position == end:
+                while True:  # yey, we found a path
+                    path.append((current_node_info[0], current_node_info[1]))  # append position, orientation to path
+                    current_node_info = parent[(current_node_info[0] * 4 + current_node_info[1], current_node_info[
+                        2])]  # previous node is the parent -> get parent by position hash, g (dist from start)
+                    if current_node_info is None:
+                        break  # start node was reached which has no parent
+                path.pop()  # remove the start node
                 path.reverse()
                 break
 
-            neighbors = get_neighbors(self.env, curr_location, curr_direction)
-
+            neighbors = get_neighbors(self.env, position, orientation)
+            neighbors.append((position, orientation))  # also check if we can wait on the current field
             for neighbor in neighbors:
                 # it's not really the neighbor we are checking, it is more the next possible position+orientation
                 neighbor_location, neighbor_direction = neighbor
 
-                if self.is_reserved(curr_location, neighbor_location, next_time_step):
+                if self.is_reserved(position, neighbor_location, next_time_step):
                     continue
 
                 neighbor_key = (neighbor_location * 4 + neighbor_direction, next_time_step)
 
                 if neighbor_key in all_nodes:
                     old = all_nodes[neighbor_key]
-                    if curr_g + 1 < old[2]:  # the neighbor was already visited, but we found a shorter route
-                        old = (old[0], old[1], curr_g + 1, old[3], old[4])  # todo: old is not updated correctly!?
+                    if g + 1 < old[2]:  # the neighbor was already visited, but we found a shorter route
+                        old = (old[0], old[1], g + 1, old[3], old[4])
                 else:
-                    next_node = (
+                    next_g = g + 1
+                    next_h = getManhattanDistance(self.env, neighbor_location, end)
+                    next_node_info = (
                         neighbor_location,
                         neighbor_direction,
-                        curr_g + 1,
-                        getManhattanDistance(self.env, neighbor_location, end),
+                        next_g,
+                        next_h,
                     )
-
+                    next_f = next_g + next_h
                     open_list.put(
-                        (next_node[3] + next_node[2], id(next_node), next_node)
+                        (next_f, id(next_node_info), next_node_info)
                     )
 
                     parent[
-                        (neighbor_location * 4 + neighbor_direction, next_node[2])
-                    ] = curr
+                        (neighbor_location * 4 + neighbor_direction, next_g)
+                    ] = current_node_info
 
+            if self.VISUALIZE:
+                current_f_values_v2[(position, orientation)] = [g+h]
+                for node in open_list.queue:
+                    f = node[0]
+                    pos = node[2][0]
+                    lowest_f = lowest_f_values.get(pos, math.inf)
+                    if f < lowest_f:
+                        lowest_f_values[pos] = f
+                    current_lowest_f = current_f_values.get(pos, math.inf)
+                    if f < current_lowest_f:
+                        current_f_values[pos] = f
+                    ori = node[2][1]
+                    current_lowest_f = min_f_values_v2.get((pos, ori), math.inf)
+                    if f < current_lowest_f:
+                        min_f_values_v2[(pos, ori)] = f
+
+                    l = current_f_values_v2.get((pos, ori))
+                    if l is not None:
+                        l.append(f)
+                    else:
+                        current_f_values_v2[(pos, ori)] = [f]
+
+                for pos in range(0, self.env.cols * self.env.rows):
+                    current_frame_data[pos] = {
+                        'f_value': current_f_values.get(pos, np.inf),
+                        'lowest_f_value': lowest_f_values.get(pos, np.inf),
+                        'lowest_g_value': lowest_g_values.get(pos, np.inf),
+                        'visit_count': explored_counts.get(pos, 0),
+                        'current': current_frame_data.get(pos, {}).get('current', False)
+                    }
+                grid_data.append(current_frame_data)
+
+                for pos in range(0, self.env.cols * self.env.rows):
+                    orientations_data = []
+                    for ori in range(4):  # Assuming 4 orientations
+                        is_current = pos == position and ori == orientation
+                        f_val = min_f_values_v2.get((pos, ori), np.inf)  # f_value for specific orientation
+
+                        orientation_data = {
+                            'min_f_value': f_val,
+                            'f_value': current_f_values_v2.get((pos, ori), [math.inf]),
+                            'current': is_current
+                        }
+                        orientations_data.append(orientation_data)
+
+                    current_frame_data_v2[pos] = {'orientations': orientations_data}
+
+                grid_data_v2.append(current_frame_data_v2.copy())
+        if self.VISUALIZE:
+            pass
+            visualize_grid_with_lowest_g(open_list_visualization_data, self.env.map,
+                                         grid_size=(self.env.cols, self.env.rows))
+            visualize_explored_count(explored_counts, self.env.map, grid_size=(self.env.cols, self.env.rows))
+            animate_combined_v2(grid_data_v2, self.env.map, interval=50, grid_size=(self.env.cols, self.env.rows),
+                                filename=f"{self.env.map_name}_start_{start}_end_{end}.gif")
         return path
 
     def is_reserved(self, start: int, end: int, time_step: int):
@@ -118,8 +212,10 @@ class SpaceTimeAStarPlanner(BasePlanner):
             return True  # the edge end --to--> start is already reserved in the next timestep
         return False
 
-
     def sample_priority_planner(self, time_limit: int):
+        # todo only do replanning each nth step
+        # todo: stop when time_limit is reached?
+        # todo: implement random restarts
         self.reservation = set()
         self.next_actions = [Action.W.value] * len(self.env.curr_states)
 

@@ -6,7 +6,7 @@ from python.util import get_neighbors
 from python.models import Env, State, Orientation, Action
 
 
-def grids_to_env(grid: list[list[Union[int, str]]], goal_grid: list[list[int]]) -> Env:
+def grids_to_env(grid: list[list[Union[int, str]]], goal_grid: list[list[int]], map_name="map") -> Env:
     one_d_map = [cell for row in grid for cell in row]
     one_d_goal_grid = [cell for row in goal_grid for cell in row]
 
@@ -34,7 +34,7 @@ def grids_to_env(grid: list[list[Union[int, str]]], goal_grid: list[list[int]]) 
             robot_nr = cell_value - 1
             goal_locations[robot_nr] = [[i, 0]]  # position, timestep when target was revealed
 
-    env = Env(cols=len(grid[0]), rows=len(grid), map=one_d_map, map_name="test map", num_of_agents=number_of_robots,
+    env = Env(cols=len(grid[0]), rows=len(grid), map=one_d_map, map_name=map_name, num_of_agents=number_of_robots,
               curr_timestep=0, curr_states=robot_states, goal_locations=goal_locations)
     return env
 
@@ -99,16 +99,49 @@ def print_grid(env: Env):
 class PlannerTest(unittest.TestCase):
     def get_test_env(self) -> Env:
         grid = [  # 0 - empty; 1 - wall; "<i><o>" i - robot nr (has to be bigger than 0) o - orientation (<>v^)
-            [0, 0, 0, 0],
-            [0, "1>", 0, 0],
-            [0, 1, 0, 0],
-            [0, 1, 0, 0],
+            [0, 0000, 0, 0],
+            [0, "1>", 1, 0],
+            [0, 0000, 1, 0],
+            [0, 0000, 0, 0],
         ]
         goal_grid = [
             [0, 0, 0, 0],  # 0 - empty; 1-infinity - goal of robot 1 - inf
             [0, 0, 0, 1],  # goal of robot 1 (goals have to be the robot
             [0, 0, 0, 0],
             [0, 0, 0, 0],
+        ]
+        return grids_to_env(grid, goal_grid, "small_test_map")
+
+    def get_huge_test_env(self):
+        grid = [  # 0 - empty; 1 - wall; "<i><o>" i - robot nr (has to be bigger than 0) o - orientation (<>v^)
+            [0, 0, 0, 0, 0, 0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, "1>", 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+        ]
+        goal_grid = [
+            # 0 - empty; 1-infinity - goal of robot 1 - inf
+            # goal of robot 1 (goals have to be the robot
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         ]
         return grids_to_env(grid, goal_grid)
 
@@ -118,19 +151,27 @@ class PlannerTest(unittest.TestCase):
         neighbors = get_neighbors(env, first_robot_state.location, first_robot_state.orientation)
         # robot is currently at cell 5 with orientation 0 (east)
         # -> neighbors should be the positions after move fw / turn left / right
-        self.assertListEqual(neighbors, [(6, 0), (5, 3), (5, 1)])
+        self.assertListEqual(neighbors, [(5, 3), (5, 1)])
 
     def test_basic_planning_one_step(self):
         planner = SpaceTimeAStarPlanner()
         planner.env = env = self.get_test_env()
+        planner.VISUALIZE = True
+        print_grid(env)
+        actions = planner.plan(None)
+        env = update_env(env, actions)
+        print_grid(env)
+        self.assertEqual(actions[0], Action.CCR.value)
+
+    def test_basic_planning_huge_map(self):
+        planner = SpaceTimeAStarPlanner()
+        planner.env = env = self.get_huge_test_env()
+        planner.VISUALIZE = False
         print_grid(env)
         actions = planner.plan(None)
         env = update_env(env, actions)
         print_grid(env)
         self.assertEqual(actions[0], Action.FW.value)
-        actions = planner.plan(None)
-        env = update_env(env, actions)
-        print_grid(env)
 
     def test_basic_planning_two_robots(self):
         grid = [
@@ -181,3 +222,20 @@ class PlannerTest(unittest.TestCase):
         planner.env = env
         actions = planner.plan(None)
         self.assertNotEquals(actions, [Action.W.value, Action.W.value])
+
+    def test_wait_until_blocking_robot_moved(self):
+        grid = [
+            [0, 0000, 0],
+            [0, 0000, "2<"],
+            [0, "1^", 0]
+        ]
+        goal_grid = [
+            [0, 1, 0],
+            [0, 2, 0],
+            [0, 0, 0]
+        ]
+        env = grids_to_env(grid, goal_grid)
+        planner = SpaceTimeAStarPlanner()
+        planner.env = env
+        actions = planner.plan(None)
+        self.assertEquals(Action(actions[1]), Action.W)
