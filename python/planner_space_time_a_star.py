@@ -1,3 +1,5 @@
+import math
+import random
 from typing import List, Tuple, Set
 from queue import PriorityQueue
 from python.models import Action, BasePlanner
@@ -10,14 +12,18 @@ class SpaceTimeAStarPlanner(BasePlanner):
     # (cell id 1, cell id 2, timestep relative to current timestep [one_based])
     cell_hash_to_robot_id: dict[Tuple[int, int, int], int] = {}
     # (cell id, -1, timestep [one_based]): robot id
-    next_actions = list[int]
+    next_actions = list[list[int]]
     # next action for each robot
-    time_step = 0
-    # current time step
+    last_planning_step = -math.inf
+    replanning_period = 2  # only replan every nth step
+    time_horizon = 10  # how many steps to plan ahead
+
     VISUALIZE = False
 
-    def __init__(self, pyenv=None, visualize=False, animate=False) -> None:
+    def __init__(self, pyenv=None, visualize=False, animate=False, replanning_period=2, time_horizon=10) -> None:
         super().__init__(pyenv, "Space-Time-A-Star-Planner")
+        self.replanning_period = replanning_period
+        self.time_horizon = time_horizon
         if visualize:
             self.VISUALIZE = True
             self.visualizer = AStarVisualizer()
@@ -27,7 +33,12 @@ class SpaceTimeAStarPlanner(BasePlanner):
         return True  # todo: implement preprocessing or optimal pathfinding
 
     def plan(self, time_limit) -> list[int]:
-        return self.sample_priority_planner(time_limit)
+        if self.last_planning_step + self.replanning_period <= self.env.curr_timestep:
+            self.last_planning_step = self.env.curr_timestep
+            print("plan")
+            return self.sample_priority_planner(time_limit)
+        else:
+            return self.next_actions[self.env.curr_timestep - self.last_planning_step]
 
     def space_time_plan(
             self,
@@ -143,7 +154,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
         # todo: stop when time_limit is reached?
         # todo: implement random restarts
         self.reservation = set()
-        self.next_actions = [Action.W.value] * len(self.env.curr_states)
+        self.next_actions = [[Action.W.value]*len(self.env.curr_states) for _ in range(self.replanning_period)]
 
         # reserve waiting cell for all robots that don't have any goals left
         for robot_id in range(self.env.num_of_agents):
@@ -169,32 +180,49 @@ class SpaceTimeAStarPlanner(BasePlanner):
 
             last_loc = self.env.curr_states[robot_id].location
             if path:
-                if path[0][0] != self.env.curr_states[robot_id].location:
-                    self.next_actions[robot_id] = Action.FW.value
-                elif path[0][1] != self.env.curr_states[robot_id].orientation:
-                    incr = path[0][1] - self.env.curr_states[robot_id].orientation
-                    if incr == 1 or incr == -3:
-                        self.next_actions[robot_id] = Action.CR.value
-                    elif incr == -1 or incr == 3:
-                        self.next_actions[robot_id] = Action.CCR.value
-
+                # convert the path to actions
+                prev_loc = self.env.curr_states[robot_id].location
+                prev_ori = self.env.curr_states[robot_id].orientation
+                for i in range(min(len(path), self.replanning_period)):
+                    # todo compare with previous not with current state
+                    new_location = path[i][0]
+                    new_orientation = path[i][1]
+                    if new_location != prev_loc:
+                        self.next_actions[i][robot_id] = Action.FW.value
+                    elif new_orientation != prev_ori:
+                        incr = new_orientation - prev_ori
+                        if incr == 1 or incr == -3:
+                            self.next_actions[i][robot_id] = Action.CR.value
+                        elif incr == -1 or incr == 3:
+                            self.next_actions[i][robot_id] = Action.CCR.value
+                    prev_loc = new_location
+                    prev_ori = new_orientation
+                # reserve the path
                 time_step = 1
-                for p in path:
+                for step in range(self.time_horizon):
+                    if step < len(path):
+                        p = path[step]
+                    else:
+                        p = path[-1]  # take the last position if path ends before time horizon
+
                     self.add_reservation(last_loc, p[0], time_step, robot_id)
                     last_loc = p[0]
                     time_step += 1
             if not path:
+                # todo: make the path finding always return a valid path if possible
+                #  (does not have to reach the goal but should avoid collisions)
                 # there is no path for robot i -> he will wait -> reserve his waiting position BUT:
                 # it is possible that the waiting cell is already reserved -> the robot that reserved the cell has to be stopped
                 # to prevent a crash
-                waiting_position = (last_loc, -1, 1)
-                if self.is_reserved(*waiting_position):
-                    # check who reserved it and cancel his actions
-                    self.handle_conflict(*waiting_position)
-                else:
-                    self.add_reservation(*waiting_position, robot_id)
+                for step in range(self.replanning_period):
+                    waiting_position = (last_loc, -1, step + 1)
+                    if self.is_reserved(*waiting_position):
+                        # check who reserved it and cancel his actions
+                        self.handle_conflict(*waiting_position)
+                    else:
+                        self.add_reservation(*waiting_position, robot_id)
 
-        return self.next_actions
+        return self.next_actions[0]
 
     def add_reservation(self, start: int, end: int, time_step: int, robot_index: int):
         """
@@ -217,10 +245,11 @@ class SpaceTimeAStarPlanner(BasePlanner):
         # todo: revoke all the reservations of the robot that reserved (start, end, time_step)
         # todo: check if there is an easy & quick reroute of the colliding robot possible
         colliding_robot_id = self.cell_hash_to_robot_id[(start, end, time_step)]
-        self.next_actions[colliding_robot_id] = Action.W.value  # make colliding robot wait
-        # if the colliding robot which will now wait would collide with another robot -> stop the other robot also
-        stopped_robot_location = self.env.curr_states[colliding_robot_id].location
-        wait_cell_hash_of_stopped_robot = (stopped_robot_location, -1, time_step)
-        if self.is_reserved(*wait_cell_hash_of_stopped_robot):
-            self.handle_conflict(*wait_cell_hash_of_stopped_robot)
-        self.add_reservation(*wait_cell_hash_of_stopped_robot, colliding_robot_id)
+        for step in range(self.replanning_period):
+            self.next_actions[step][colliding_robot_id] = Action.W.value  # make colliding robot wait
+            # if the colliding robot which will now wait would collide with another robot -> stop the other robot also
+            stopped_robot_location = self.env.curr_states[colliding_robot_id].location
+            wait_cell_hash_of_stopped_robot = (stopped_robot_location, -1, step + 1)
+            if self.is_reserved(*wait_cell_hash_of_stopped_robot):
+                self.handle_conflict(*wait_cell_hash_of_stopped_robot)
+            self.add_reservation(*wait_cell_hash_of_stopped_robot, colliding_robot_id)
