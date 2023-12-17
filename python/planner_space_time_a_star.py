@@ -1,13 +1,8 @@
-import math
 from typing import List, Tuple, Set
 from queue import PriorityQueue
-
 from python.models import Action, BasePlanner
 from python.util import getManhattanDistance, get_neighbors
-import numpy as np
-
-from python.visualization_a_star import animate_combined, visualize_grid_with_lowest_g, visualize_explored_count, \
-    animate_combined_v2
+from python.visualization_a_star import AStarVisualizer
 
 
 class SpaceTimeAStarPlanner(BasePlanner):
@@ -18,16 +13,17 @@ class SpaceTimeAStarPlanner(BasePlanner):
     next_actions = list[int]
     # next action for each robot
     time_step = 0
-
     # current time step
 
-    def __init__(self, pyenv=None, visualize=False) -> None:
+    def __init__(self, pyenv=None, visualize=False, animate=False) -> None:
         super().__init__(pyenv, "Space-Time-A-Star-Planner")
-        self.VISUALIZE = visualize
-        print(f"{self.name} created")
+        if visualize:
+            self.VISUALIZE = True
+            self.visualizer = AStarVisualizer()
+            self.visualizer.GENERATE_ANIMATIONS = animate
 
     def initialize(self, preprocess_time_limit: int):
-        return True  # todo: implement
+        return True  # todo: implement preprocessing or optimal pathfinding
 
     def plan(self, time_limit) -> list[int]:
         return self.sample_priority_planner(time_limit)
@@ -51,48 +47,28 @@ class SpaceTimeAStarPlanner(BasePlanner):
         parent = {}
 
         if self.VISUALIZE:
-            open_list_visualization_data = []  # Data for visualization
-            explored_counts = {}
-            explored_counts_list = [{}]
-            grid_data = []
-            grid_data_v2 = []
-            current_frame_data_v2 = {}
-            min_f_values_v2 = {}
-            lowest_g_values = {}
-            lowest_f_values = {}
+            self.visualizer.reset()
 
         h = getManhattanDistance(self.env, start, end)  # heuristic approximation
         g = 0  # distance traveled
         node_info = (start, start_direct, g, h)
-        open_list.put((g + h, id(node_info), node_info))
-        # all_nodes[(start * 4 + start_direct, 0)] = s
+        open_list.put((g + h, h, id(node_info), node_info))
         position_direction_hash = start * 4 + start_direct
         # why start * 4 + start_direct ?
-        # because: this results in a unique hash of the postion/orientation (4 orientations -> if orientation changes: at least +1; if cell changes: at least +4)
+        # because: this results in a unique hash of the postion/orientation (4 orientations -> if orientation changes: at least +1 or +3 at most; if cell changes: at least +4)
         # this is a hash that is used to check if a position/orientation-combination was already looked at
         parent[(position_direction_hash, g)] = None  # safe the parent node
 
         while not open_list.empty():  # look at all cells in the open list
             if self.VISUALIZE:
-                open_list_visualization_data.append([(n[2][0], n[2][2]) for n in open_list.queue])
-                current_frame_data = {}
-                current_f_values = {}
-                current_f_values_v2 = {}
+                self.visualizer.commit_open_list([(n[3][0], n[3][2]) for n in open_list.queue])
+                self.visualizer.new_step()
 
             node = open_list.get()  # get the node with the lowest f value
-            h, node_id, current_node_info = node
+            f, h, node_id, current_node_info = node
             position, orientation, g, h = current_node_info
             current_time_step = g  # it is the same, when planning was started in time_step 0
             next_time_step = current_time_step + 1
-
-            if self.VISUALIZE:
-                explored_counts[position] = explored_counts.get(position, 0) + 1
-                explored_counts_list.append(explored_counts.copy())
-                # Update explored counts and lowest g values
-                if position not in lowest_g_values or g < lowest_g_values[position]:
-                    lowest_g_values[position] = g
-                # Mark the current cell
-                current_frame_data[position] = {'current': True}
 
             if (position * 4 + orientation, g) in all_nodes:
                 continue  # skip if this node was already looked at - at the current time step
@@ -121,7 +97,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
 
                 if neighbor_key in all_nodes:
                     old = all_nodes[neighbor_key]
-                    if g + 1 < old[2]:  # the neighbor was already visited, but we found a shorter route
+                    if g + 1 < old[2]:  # todo what exactly is this good for?
                         old = (old[0], old[1], g + 1, old[3], old[4])
                 else:
                     next_g = g + 1
@@ -134,7 +110,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
                     )
                     next_f = next_g + next_h
                     open_list.put(
-                        (next_f, id(next_node_info), next_node_info)
+                        (next_f, next_h, id(next_node_info), next_node_info)
                     )
 
                     parent[
@@ -142,60 +118,9 @@ class SpaceTimeAStarPlanner(BasePlanner):
                     ] = current_node_info
 
             if self.VISUALIZE:
-                current_f_values_v2[(position, orientation)] = [g+h]
-                for node in open_list.queue:
-                    f = node[0]
-                    pos = node[2][0]
-                    lowest_f = lowest_f_values.get(pos, math.inf)
-                    if f < lowest_f:
-                        lowest_f_values[pos] = f
-                    current_lowest_f = current_f_values.get(pos, math.inf)
-                    if f < current_lowest_f:
-                        current_f_values[pos] = f
-                    ori = node[2][1]
-                    current_lowest_f = min_f_values_v2.get((pos, ori), math.inf)
-                    if f < current_lowest_f:
-                        min_f_values_v2[(pos, ori)] = f
-
-                    l = current_f_values_v2.get((pos, ori))
-                    if l is not None:
-                        l.append(f)
-                    else:
-                        current_f_values_v2[(pos, ori)] = [f]
-
-                for pos in range(0, self.env.cols * self.env.rows):
-                    current_frame_data[pos] = {
-                        'f_value': current_f_values.get(pos, np.inf),
-                        'lowest_f_value': lowest_f_values.get(pos, np.inf),
-                        'lowest_g_value': lowest_g_values.get(pos, np.inf),
-                        'visit_count': explored_counts.get(pos, 0),
-                        'current': current_frame_data.get(pos, {}).get('current', False)
-                    }
-                grid_data.append(current_frame_data)
-
-                for pos in range(0, self.env.cols * self.env.rows):
-                    orientations_data = []
-                    for ori in range(4):  # Assuming 4 orientations
-                        is_current = pos == position and ori == orientation
-                        f_val = min_f_values_v2.get((pos, ori), np.inf)  # f_value for specific orientation
-
-                        orientation_data = {
-                            'min_f_value': f_val,
-                            'f_value': current_f_values_v2.get((pos, ori), [math.inf]),
-                            'current': is_current
-                        }
-                        orientations_data.append(orientation_data)
-
-                    current_frame_data_v2[pos] = {'orientations': orientations_data}
-
-                grid_data_v2.append(current_frame_data_v2.copy())
+                self.visualizer.update_data(self.env, open_list, position, orientation, g)
         if self.VISUALIZE:
-            pass
-            visualize_grid_with_lowest_g(open_list_visualization_data, self.env.map,
-                                         grid_size=(self.env.cols, self.env.rows))
-            visualize_explored_count(explored_counts, self.env.map, grid_size=(self.env.cols, self.env.rows))
-            animate_combined_v2(grid_data_v2, self.env.map, interval=50, grid_size=(self.env.cols, self.env.rows),
-                                filename=f"{self.env.map_name}_start_{start}_end_{end}.gif")
+            self.visualizer.save_visualizations(self.env, start, end)
         return path
 
     def is_reserved(self, start: int, end: int, time_step: int):

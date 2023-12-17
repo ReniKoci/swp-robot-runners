@@ -46,6 +46,7 @@ class BasePlanner:
         self.name = name
         if pyenv is not None:
             self.env: Env = pyenv.env
+        print(f"{self.name} created")
 
     @abstractmethod
     def initialize(self, preprocess_time_limit: int):

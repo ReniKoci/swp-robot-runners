@@ -143,7 +143,7 @@ class PlannerTest(unittest.TestCase):
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         ]
-        return grids_to_env(grid, goal_grid)
+        return grids_to_env(grid, goal_grid, "huge_test_map")
 
     def test_get_neighbors(self):
         env = self.get_test_env()
@@ -154,9 +154,8 @@ class PlannerTest(unittest.TestCase):
         self.assertListEqual(neighbors, [(5, 3), (5, 1)])
 
     def test_basic_planning_one_step(self):
-        planner = SpaceTimeAStarPlanner()
+        planner = SpaceTimeAStarPlanner(visualize=True)
         planner.env = env = self.get_test_env()
-        planner.VISUALIZE = True
         print_grid(env)
         actions = planner.plan(None)
         env = update_env(env, actions)
@@ -164,9 +163,8 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(actions[0], Action.CCR.value)
 
     def test_basic_planning_huge_map(self):
-        planner = SpaceTimeAStarPlanner()
+        planner = SpaceTimeAStarPlanner(visualize=True, animate=False)
         planner.env = env = self.get_huge_test_env()
-        planner.VISUALIZE = False
         print_grid(env)
         actions = planner.plan(None)
         env = update_env(env, actions)

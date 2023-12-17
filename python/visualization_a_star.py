@@ -1,3 +1,4 @@
+import datetime
 import math
 
 import numpy as np
@@ -6,11 +7,121 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Polygon
 from matplotlib.animation import FuncAnimation
 
+from python.models import Env
 
-def visualize_grid_with_lowest_g(open_list_data, env_map: list[int], grid_size):
+
+class AStarVisualizer:
+    """
+    provides callback functions that can be used to collect and then visualize path finding data
+    """
+    GENERATE_ANIMATIONS = True
+
+    open_list_visualization_data = []  # Data for visualization
+    explored_counts = {}
+    explored_counts_list = [{}]
+    grid_data = []
+    grid_data_v2 = []
+    current_frame_data = {}
+    current_frame_data_v2 = {}
+    min_f_values_v2 = {}
+    lowest_g_values = {}
+    lowest_f_values = {}
+    current_f_values_v2 = {}
+    current_f_values = {}
+
+    def reset(self):
+        self.open_list_visualization_data = []  # Data for visualization
+        self.explored_counts = {}
+        self.explored_counts_list = [{}]
+        self.grid_data = []
+        self.grid_data_v2 = []
+        self.current_frame_data = {}
+        self.current_frame_data_v2 = {}
+        self.min_f_values_v2 = {}
+        self.lowest_g_values = {}
+        self.lowest_f_values = {}
+        self.current_f_values_v2 = {}
+        self.current_frame_data = {}
+        self.current_f_values = {}
+
+    def commit_open_list(self, ol: list):
+        self.open_list_visualization_data.append(ol)
+
+    def new_step(self):
+        self.current_frame_data = {}
+        self.current_f_values = {}
+        self.current_f_values_v2 = {}
+
+    def update_data(self, env: Env, open_list, current_pos: int, current_ori: int, g: int):
+        self.explored_counts[current_pos] = self.explored_counts.get(current_pos, 0) + 1  # increase by 1
+        self.explored_counts_list.append(self.explored_counts.copy())  # save explored counts history
+        # Update explored counts and lowest g values
+        if current_pos not in self.lowest_g_values or g < self.lowest_g_values[current_pos]:
+            self.lowest_g_values[current_pos] = g  # found a lower g value
+
+        # self.current_f_values_v2[(position, orientation)] = [g+h] # todo: do we need this?
+        for node in open_list.queue:
+            f = node[0]
+            pos = node[3][0]
+            lowest_f = self.lowest_f_values.get(pos, math.inf)
+            if f < lowest_f:
+                self.lowest_f_values[pos] = f
+            current_lowest_f = self.current_f_values.get(pos, math.inf)
+            if f < current_lowest_f:
+                self.current_f_values[pos] = f
+            ori = node[3][1]
+            current_lowest_f = self.min_f_values_v2.get((pos, ori), math.inf)
+            if f < current_lowest_f:
+                self.min_f_values_v2[(pos, ori)] = f
+
+            l = self.current_f_values_v2.get((pos, ori))
+            if l is not None:
+                l.append(f)
+            else:
+                self.current_f_values_v2[(pos, ori)] = [f]
+
+        for pos in range(0, env.cols * env.rows):
+            self.current_frame_data[pos] = {
+                'f_value': self.current_f_values.get(pos, np.inf),
+                'lowest_f_value': self.lowest_f_values.get(pos, np.inf),
+                'lowest_g_value': self.lowest_g_values.get(pos, np.inf),
+                'visit_count': self.explored_counts.get(pos, 0),
+                'current': pos == current_pos
+            }
+        self.grid_data.append(self.current_frame_data)
+
+        for pos in range(0, env.cols * env.rows):
+            orientations_data = []
+            for ori in range(4):  # Assuming 4 orientations
+                is_current = pos == current_pos and ori == current_ori
+                f_val = self.min_f_values_v2.get((pos, ori), np.inf)  # f_value for specific orientation
+
+                orientation_data = {
+                    'min_f_value': f_val,
+                    'f_value': self.current_f_values_v2.get((pos, ori), [math.inf]),
+                    'current': is_current
+                }
+                orientations_data.append(orientation_data)
+
+            self.current_frame_data_v2[pos] = {'orientations': orientations_data}
+
+        self.grid_data_v2.append(self.current_frame_data_v2.copy())
+
+    def save_visualizations(self, env, start, end):
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
+        visualize_grid_with_lowest_g(self.open_list_visualization_data, env.map,
+                                     grid_size=(env.cols, env.rows), filename=f"lowest_g_{timestamp}_{env.map_name}_start_{start}_end_{end}.png")
+        visualize_explored_count(self.explored_counts, env.map, grid_size=(env.cols, env.rows), filename=f"explored_count_{timestamp}_{env.map_name}_start_{start}_end_{end}.png")
+        if self.GENERATE_ANIMATIONS:
+            animate_combined_v2(self.grid_data_v2, env.map, interval=50, grid_size=(env.cols, env.rows),
+                                filename=f"{timestamp}_{env.map_name}_start_{start}_end_{end}.gif")
+
+
+def visualize_grid_with_lowest_g(open_list_data, env_map: list[int], grid_size, filename="lowest_g.png"):
     """
     Visualizes a grid where each cell shows the lowest g value from the last snapshot of open_list_data.
     Also plots obstacles as black cells.
+    :param filename: file name
     :param open_list_data: A list of lists, where each inner list contains tuples (position, f value)
     :param env_map: 1D array representing the environment map, where 1 indicates an obstacle
     :param grid_size: Tuple (width, height) representing the size of the grid
@@ -51,7 +162,7 @@ def visualize_grid_with_lowest_g(open_list_data, env_map: list[int], grid_size):
         if g_value != np.inf and g_value != -1:
             plt.text(i, j, f"{g_value:.0f}", ha='center', va='center', color='white')
 
-    plt.savefig("lowest_g.png")
+    plt.savefig(filename)
 
 
 def animate_grid_with_lowest_g(open_list_data, env_map, grid_size, filename='lowest_g_animation.gif'):
@@ -111,7 +222,7 @@ def animate_grid_with_lowest_g(open_list_data, env_map, grid_size, filename='low
     anim.save(filename, writer='pillow')
 
 
-def visualize_explored_count(explored_counts, env_map, grid_size):
+def visualize_explored_count(explored_counts, env_map, grid_size, filename="explored_count.png"):
     """
     Visualizes a grid where each cell shows the number of times it has been explored.
     Obstacles are plotted as black cells.
@@ -149,7 +260,7 @@ def visualize_explored_count(explored_counts, env_map, grid_size):
         if count > 0:
             plt.text(i, j, int(count), ha='center', va='center', color='white')
 
-    plt.savefig("explored_count.png")
+    plt.savefig(filename)
 
 
 def animate_explored_count(explored_counts_list, env_map, grid_size, filename='explored_count_animation.gif', interval=200, dpi=80):
