@@ -14,6 +14,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
     # next action for each robot
     time_step = 0
     # current time step
+    VISUALIZE = False
 
     def __init__(self, pyenv=None, visualize=False, animate=False) -> None:
         super().__init__(pyenv, "Space-Time-A-Star-Planner")

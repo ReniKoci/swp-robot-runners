@@ -126,9 +126,6 @@ def visualize_grid_with_lowest_g(open_list_data, env_map: list[int], grid_size, 
     :param env_map: 1D array representing the environment map, where 1 indicates an obstacle
     :param grid_size: Tuple (width, height) representing the size of the grid
     """
-    if not open_list_data:
-        raise ValueError("open_list_data is empty")
-
     # Extract the last snapshot
     last_snapshot = open_list_data[-1]
     grid_size = (grid_size[1], grid_size[0])
@@ -139,7 +136,7 @@ def visualize_grid_with_lowest_g(open_list_data, env_map: list[int], grid_size, 
     for snapshot in open_list_data:
         for position, f_value in snapshot:
             y, x = np.unravel_index(position,
-                                    grid_size)  # Adjust this if position needs to be converted from linear index to 2D coordinates
+                                    grid_size)
             grid[y, x] = min(grid[y, x], f_value)
 
     # Mark obstacles in the grid

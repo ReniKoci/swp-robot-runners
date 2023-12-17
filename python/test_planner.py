@@ -1,5 +1,11 @@
 import unittest
+from copy import deepcopy
+from itertools import cycle
 from typing import Union
+
+import numpy as np
+from matplotlib import pyplot as plt, patches
+from matplotlib.animation import FuncAnimation
 
 from python.planner_space_time_a_star import SpaceTimeAStarPlanner
 from python.util import get_neighbors
@@ -94,6 +100,69 @@ def print_grid(env: Env):
     for row in grid:
         print('| ' + ' | '.join(row) + ' |')
         print(horizontal_line)
+
+
+def animate_grid(envs: list, filename='grid_animation.gif', interval=200):
+    grid_size = (envs[0].rows, envs[0].cols)
+    orientation_symbols = ['→', '↓', '←', '↑']
+    colors = cycle(['red', 'green', 'blue', 'orange', 'purple', 'cyan', 'magenta', 'yellow'])
+
+    # Initialize a grid
+    grid = np.zeros(grid_size)
+
+    # Prepare the figure and axes
+    fig, ax = plt.subplots()
+    im = ax.imshow(grid)
+
+    # Set plot labels, title, and axis limits
+    ax.set_xlabel('X Coordinate')
+    ax.set_ylabel('Y Coordinate')
+    ax.set_title('Grid Animation with Obstacles, Goals, and Robots')
+    ax.set_xticks(np.arange(-0.5, grid_size[1], 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, grid_size[0], 1), minor=True)
+    ax.grid(which='minor', color='black', linestyle='-', linewidth=2)
+    robot_colors = {}
+    for idx, _ in enumerate(envs[0].curr_states):
+        robot_colors[idx] = next(colors)
+
+    def update(frame):
+        env = envs[frame]
+        # Clear previous contents
+        for txt in ax.texts:
+            txt.remove()
+        for patch in ax.patches:
+            patch.remove()
+
+        for i in range(env.rows * env.cols):
+            x, y = i % env.cols, i // env.cols
+            if env.map[i] == 1:
+                patch = patches.Rectangle((x - 0.5, y - 0.5), 1, 1, color='white')
+            else:
+                patch = patches.Rectangle((x - 0.5, y - 0.5), 1, 1, facecolor='black', linewidth=1, edgecolor='white')
+            ax.add_patch(patch)
+
+        # Draw goal locations and robots
+        for idx, goals in enumerate(env.goal_locations):
+            color = robot_colors.get(idx, 'grey')
+            for goal_cell_index in goals:
+                gx, gy = goal_cell_index[0] % env.cols, goal_cell_index[0] // env.cols
+                ax.text(gx, gy, f'G{idx}', ha='center', va='center', color=color, fontsize=16, fontweight='bold')
+
+        for idx, state in enumerate(env.curr_states):
+            rx, ry = state.location % env.cols, state.location // env.cols
+            color = robot_colors.get(idx, 'grey')
+            ax.add_patch(plt.Circle((rx, ry), 0.3, color=color, alpha=0.5))
+            ax.text(rx, ry, f'R{idx}{orientation_symbols[state.orientation]}',
+                    ha='center', va='center', color='white')
+
+        return [im]
+
+    # Create the animation
+    anim = FuncAnimation(fig, update, frames=len(envs), interval=interval, blit=True)
+
+    # Save the animation as a GIF
+    anim.save(filename, writer='pillow')
+    plt.close()
 
 
 class PlannerTest(unittest.TestCase):
@@ -219,7 +288,7 @@ class PlannerTest(unittest.TestCase):
         planner = SpaceTimeAStarPlanner()
         planner.env = env
         actions = planner.plan(None)
-        self.assertNotEquals(actions, [Action.W.value, Action.W.value])
+        self.assertNotEqual(actions, [Action.W.value, Action.W.value])
 
     def test_wait_until_blocking_robot_moved(self):
         grid = [
@@ -237,3 +306,32 @@ class PlannerTest(unittest.TestCase):
         planner.env = env
         actions = planner.plan(None)
         self.assertEquals(Action(actions[1]), Action.W)
+
+    def test_multiple_steps_multiple_robots(self):
+        grid = [
+            [0, 0000, 1, 0],
+            [0, 0000, 1, 0],
+            [0, "2>", 1, "1v"],
+            [0, 0000, 0, 0]
+        ]
+        goal_grid = [
+            [0, 0, 0, 2],
+            [0, 1, 0, 0],
+            [0, 0, 0, 0]
+        ]
+        env = grids_to_env(grid, goal_grid)
+        planner = SpaceTimeAStarPlanner()
+        planner.env = env
+        all_envs = [deepcopy(env)]
+        while True:
+            actions = planner.plan(None)
+            env = update_env(env, actions)
+            all_envs.append(deepcopy(env))
+            if all(a == Action.W.value for a in actions):
+                break
+        animate_grid(all_envs)
+        for robot_state, goal in zip(env.curr_states, env.goal_locations):
+            self.assertEqual(robot_state.location, goal[0][0])
+
+
+
