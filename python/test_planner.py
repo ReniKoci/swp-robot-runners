@@ -342,7 +342,7 @@ class PlannerTest(unittest.TestCase):
         for robot_state, goal in zip(env.curr_states, env.goal_locations):
             self.assertEqual(robot_state.location, goal[0][0])
 
-    def test_time_horizon_deadlock_avoidance_5(self):
+    def test_time_horizon_deadlock_avoidance(self):
         # why is there a deadlock for 3, 5 and 4, 4? because robot 1 wants to go to the left and robot
         # 2 has no way that does not lead to a collision when he reaches the left wall
         # fix:
@@ -350,6 +350,8 @@ class PlannerTest(unittest.TestCase):
         # - increase time horizon
         # 4 - 4 deadlock: idea: preserve all cells where it is clear that the robot cannot escape in one move
         #   otherwise we can end up in an unnecessary deadlock
+        # todo: after implementing random restarts for 3 - 5 it's not a deadlock anymore, but a loop :(
+        #  fix would be prioritizing the robot that is closer to its goal
         grid = [
             [0, 0000, 0, 0, 0, 0, 0, 0, 0, 0, 0000, 0],
             [0, 0000, 1, 1, 1, 1, 1, 1, 1, 1, 0000, 0],
@@ -365,21 +367,64 @@ class PlannerTest(unittest.TestCase):
         for replanning_period, time_horizon, expected_actions in [[3, 5, (Action.FW, Action.FW)],
                                                                   [4, 4, (Action.FW, Action.FW)],
                                                                   [4, 8, (Action.FW, Action.CCR)]]:
+            print(replanning_period, time_horizon)
             env = grids_to_env(grid, goal_grid, "hallway")
             planner = SpaceTimeAStarPlanner(replanning_period=replanning_period, time_horizon=time_horizon,
-                                            visualize=True)
+                                            visualize=False)
             planner.env = env
             all_envs = [deepcopy(env)]
             actions = planner.plan(None)
+            #print([Action(a) for a in actions])
             env = update_env(env, actions)
             all_envs.append(deepcopy(env))
             self.assertEqual(Action(actions[0]), expected_actions[0])
             self.assertEqual(Action(actions[1]), expected_actions[1])
             for i in range(20):
                 actions = planner.plan(None)
+                #print([Action(a) for a in actions])
                 env = update_env(env, actions)
+                #print_grid(env)
                 all_envs.append(deepcopy(env))
-                # print_grid(env)
                 if all(a == Action.W.value for a in actions):
                     break
             animate_grid(all_envs)
+
+    def test_random_restarts(self):
+        # @formatter:off
+        grid = [
+            [0, 0000,    0, 0, 0, 0, 0, 0, 0, 0, 0000, 0],
+            [0, 0000,    0, 0, 0, 0, 0, 0, 0, 1, 0000, 0],
+            [0,    1,    1, 1, 1, 1, 1, 1, 1, 1, 0000, 0],
+            [0, "2>", "3>", 0, 0, 0, 0, 0, 0, 0, "1<", 0],
+            [0,    1,    1, 1, 1, 1, 1, 1, 1, 1, 0000, 0]
+        ]
+        goal_grid = [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        ]
+        # @formatter:off
+        env = grids_to_env(grid, goal_grid, "multiple_steps_multiple_robots")
+        planner = SpaceTimeAStarPlanner(replanning_period=8, time_horizon=10)
+        planner.env = env
+        all_envs = [deepcopy(env)]
+        print_grid(env)
+        actions = planner.plan(None)
+        env = update_env(env, actions)
+        print_grid(env)
+        self.assertEqual(Action(actions[0]), Action.CR)
+        self.assertEqual(Action(actions[1]), Action.FW)
+        self.assertEqual(Action(actions[2]), Action.FW)
+        while True:
+            actions = planner.plan(None)
+            env = update_env(env, actions)
+            print([Action(a).name for a in actions])
+            print_grid(env)
+            all_envs.append(deepcopy(env))
+            if all(a == Action.W.value for a in actions):
+                break
+        animate_grid(all_envs)
+        for robot_state, goal in zip(env.curr_states, env.goal_locations):
+            self.assertEqual(robot_state.location, goal[0][0])

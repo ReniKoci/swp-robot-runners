@@ -1,6 +1,7 @@
 import math
 import random
-from typing import List, Tuple, Set
+from copy import copy
+from typing import Tuple, Set
 from queue import PriorityQueue
 from python.models import Action, BasePlanner
 from python.util import getManhattanDistance, get_neighbors
@@ -9,7 +10,7 @@ from python.visualization_a_star import AStarVisualizer
 
 class SpaceTimeAStarPlanner(BasePlanner):
 
-    def __init__(self, pyenv=None, visualize=False, animate=False, replanning_period=2, time_horizon=10) -> None:
+    def __init__(self, pyenv=None, visualize=False, animate=False, replanning_period=2, time_horizon=10, restarts=True) -> None:
         super().__init__(pyenv, "Space-Time-A-Star-Planner")
         self.reservation: Set[Tuple[int, int, int]] = set()
         # (cell id 1, cell id 2, timestep relative to current timestep [one_based])
@@ -21,6 +22,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
 
         self.replanning_period = replanning_period
         self.time_horizon = time_horizon
+        self.random_restarts = restarts
 
         self.VISUALIZE = visualize
         if visualize:
@@ -34,16 +36,53 @@ class SpaceTimeAStarPlanner(BasePlanner):
     def plan(self, time_limit) -> list[int]:
         if self.last_planning_step + self.replanning_period <= self.env.curr_timestep:
             self.last_planning_step = self.env.curr_timestep
-            return self.sample_priority_planner(time_limit)
+            return self.plan_with_random_restarts(time_limit)
         else:
             return self.next_actions[self.env.curr_timestep - self.last_planning_step]
+
+    def plan_with_random_restarts(self, time_limit) -> list[int]:
+        num_of_robots = self.env.num_of_agents
+        priority_order = tuple(range(num_of_robots))
+        first_solution, path_length_sum, waiting_robots = self.sample_priority_planner(time_limit, priority_order)
+        if not self.random_restarts:
+            return first_solution
+
+        tried_priority_orders = {priority_order}
+        min_waiting_robots = waiting_robots
+        min_path_length_sum = path_length_sum
+        best_next_actions = copy(self.next_actions)
+        # todo: maybe prioritize
+        #  - the robots that had collisions in the last planning step
+        #  - the robots that are closest to their goal
+        number_of_restarts = 10
+        number_of_restarts = min(number_of_restarts, math.factorial(num_of_robots) - 1)
+        for i in range(number_of_restarts):
+            while True:
+                new_priority_order = list(priority_order)
+                random.shuffle(new_priority_order)
+                new_priority_order = tuple(new_priority_order)
+                if new_priority_order not in tried_priority_orders:
+                    tried_priority_orders.add(new_priority_order)
+                    break
+            _, new_path_length_sum, new_waiting_robots = self.sample_priority_planner(time_limit, new_priority_order)
+            if new_waiting_robots < min_waiting_robots or (new_waiting_robots == min_waiting_robots and new_path_length_sum < min_path_length_sum):
+                min_waiting_robots = new_waiting_robots
+                min_path_length_sum = new_path_length_sum
+                best_next_actions = copy(self.next_actions)
+        self.next_actions = best_next_actions
+        return best_next_actions[0]
+        # todo how to determine the best solution? ideas:
+        #  lowest sum of path lengths, lowest number of waiting robots, lowest sum of h values
+        #  (caution: when an agent reaches its goal, he will get a new target with a new bigger h)
+
+
 
     def space_time_plan(
             self,
             start: int,
             start_direct: int,
             end: int,
-    ) -> List[Tuple[int, int]]:
+    ) -> list[tuple[int, int]]:
         """
         finds the shortest path
         :param start: the start cell index
@@ -147,18 +186,26 @@ class SpaceTimeAStarPlanner(BasePlanner):
             return True  # the edge end --to--> start is already reserved in the next timestep
         return False
 
-    def sample_priority_planner(self, time_limit: int):
-        # todo only do replanning each nth step
+    def sample_priority_planner(self, time_limit: int, robot_order=None) -> tuple[list[int], int, int]:
+        """
+        get actions for all robots
+        :param time_limit:
+        :param robot_order: order in which the robots should be planned (priority)
+        :return: actions, path_length_sum, number of waiting_robots
+        """
         # todo: stop when time_limit is reached?
-        # todo: implement random restarts
         # todo: do replan (or only plan for specific agents) when some agent reached his goal
         self.reservation = set()
         self.edge_hash_to_robot_id = {}
 
+        path_length_sum = 0
+        waiting_robots = 0
+
         self.next_actions = [[Action.W.value]*len(self.env.curr_states) for _ in range(self.replanning_period)]
 
         # reserve waiting cell for all robots that don't have any goals left
-        for robot_id in range(self.env.num_of_agents):
+        robot_order = robot_order or range(self.env.num_of_agents)
+        for robot_id in robot_order:
             path = []
             if not self.env.goal_locations[robot_id]:
                 path.append(
@@ -168,9 +215,9 @@ class SpaceTimeAStarPlanner(BasePlanner):
                     )
                 )
                 self.add_reservation(self.env.curr_states[robot_id].location, -1, 1, robot_id)
-
+            # todo: reserve cell for every step
         # plan and reserve path for one robot at a time
-        for robot_id in range(self.env.num_of_agents):
+        for robot_id in robot_order:
             path = []
             if self.env.goal_locations[robot_id]:
                 path = self.space_time_plan(  # get the shortest possible path
@@ -181,11 +228,11 @@ class SpaceTimeAStarPlanner(BasePlanner):
 
             last_loc = self.env.curr_states[robot_id].location
             if path:
+                path_length_sum += len(path)
                 # convert the path to actions
                 prev_loc = self.env.curr_states[robot_id].location
                 prev_ori = self.env.curr_states[robot_id].orientation
                 for i in range(min(len(path), self.replanning_period)):
-                    # todo compare with previous not with current state
                     new_location = path[i][0]
                     new_orientation = path[i][1]
                     if new_location != prev_loc:
@@ -210,6 +257,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
                     last_loc = p[0]
                     time_step += 1
             if not path:
+                waiting_robots += 1
                 # todo: make the path finding always return a valid path if possible
                 #  (does not have to reach the goal but should avoid collisions)
                 # there is no path for robot i -> he will wait -> reserve his waiting position BUT:
@@ -223,7 +271,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
                     else:
                         self.add_reservation(*waiting_position, robot_id)
 
-        return self.next_actions[0]
+        return self.next_actions[0], path_length_sum, waiting_robots
 
     def add_reservation(self, start: int, end: int, time_step: int, robot_index: int):
         """
