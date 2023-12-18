@@ -114,7 +114,7 @@ class AStarVisualizer:
         visualize_explored_count(self.explored_counts, env.map, grid_size=(env.cols, env.rows), filename=f"explored_count_{timestamp}_{env.map_name}_start_{start}_end_{end}.png")
         if self.GENERATE_ANIMATIONS:
             animate_combined_v2(self.grid_data_v2, env.map, interval=50, grid_size=(env.cols, env.rows),
-                                filename=f"{timestamp}_{env.map_name}_start_{start}_end_{end}.gif")
+                                filename=f"{env.map_name}_{timestamp}_start_{start}_end_{end}.gif")
 
 
 def visualize_grid_with_lowest_g(open_list_data, env_map: list[int], grid_size, filename="lowest_g.png"):
@@ -146,6 +146,7 @@ def visualize_grid_with_lowest_g(open_list_data, env_map: list[int], grid_size, 
             grid[y, x] = -1  # Marking the obstacle
 
     # Plotting the grid
+    plt.figure()
     cmap = plt.cm.viridis
     cmap.set_under('black')  # Set color for obstacles
     plt.imshow(grid, cmap=cmap, interpolation='nearest', vmin=0)
@@ -160,63 +161,9 @@ def visualize_grid_with_lowest_g(open_list_data, env_map: list[int], grid_size, 
             plt.text(i, j, f"{g_value:.0f}", ha='center', va='center', color='white')
 
     plt.savefig(filename)
+    plt.close()
 
 
-def animate_grid_with_lowest_g(open_list_data, env_map, grid_size, filename='lowest_g_animation.gif'):
-    """
-    Creates an animation where each frame shows the grid at a different snapshot.
-    :param open_list_data: A list of lists, where each inner list contains tuples (position, f value)
-    :param env_map: 1D array representing the environment map, where 1 indicates an obstacle
-    :param grid_size: Tuple (width, height) representing the size of the grid
-    :param filename: Filename for saving the animation
-    """
-    if not open_list_data:
-        raise ValueError("open_list_data is empty")
-
-    # Adjust grid size as width and height are switched
-    grid_size = (grid_size[1], grid_size[0])
-
-    # Initialize a grid with a high value
-    grid = np.full(grid_size, np.inf)
-
-    # Prepare the figure and axes
-    fig, ax = plt.subplots()
-    cmap = plt.cm.viridis
-    cmap.set_under('black')  # Set color for obstacles
-    im = ax.imshow(grid, cmap=cmap, interpolation='nearest', vmin=0)
-
-    # Set plot labels and title
-    ax.set_xlabel('X Coordinate')
-    ax.set_ylabel('Y Coordinate')
-    ax.set_title('Grid Animation of Lowest g Values with Obstacles')
-
-    # Add colorbar for the legend
-    cbar = fig.colorbar(im, ax=ax)
-    cbar.set_label('Lowest g Value')
-
-    # Function to update each frame in the animation
-    def update(frame):
-        grid.fill(np.inf)  # Reset the grid
-
-        # Update grid with the current snapshot
-        for position, g_value in open_list_data[frame]:
-            y, x = np.unravel_index(position, grid_size)
-            grid[y, x] = min(grid[y, x], g_value)
-
-        # Update obstacles
-        for position, is_obstacle in enumerate(env_map):
-            if is_obstacle == 1:
-                y, x = np.unravel_index(position, grid_size)
-                grid[y, x] = -1
-
-        im.set_data(grid)
-        return [im]
-
-    # Create the animation
-    anim = FuncAnimation(fig, update, frames=len(open_list_data), blit=True)
-
-    # Save the animation as a GIF
-    anim.save(filename, writer='pillow')
 
 
 def visualize_explored_count(explored_counts, env_map, grid_size, filename="explored_count.png"):
@@ -258,159 +205,7 @@ def visualize_explored_count(explored_counts, env_map, grid_size, filename="expl
             plt.text(i, j, int(count), ha='center', va='center', color='white')
 
     plt.savefig(filename)
-
-
-def animate_explored_count(explored_counts_list, env_map, grid_size, filename='explored_count_animation.gif', interval=200, dpi=80):
-    """
-    Creates an animation where each frame shows the grid at a different snapshot based on explored counts.
-    Highlights the cell that has increased in the current frame.
-    :param explored_counts_list: List of dictionaries with cell positions as keys and explored counts as values
-    :param env_map: 1D array representing the environment map, where 1 indicates an obstacle
-    :param grid_size: Tuple (width, height) representing the size of the grid
-    :param filename: Filename for saving the animation
-    :param interval: Delay between frames in milliseconds
-    :param dpi: Dots per inch for the saved animation
-    """
-    # Adjust grid size as width and height are switched
-    grid_size = (grid_size[1], grid_size[0])
-
-    # Initialize a grid with zeros (no exploration)
-    grid = np.zeros(grid_size)
-    last_grid = np.zeros(grid_size)
-
-    # Prepare the figure and axes
-    fig, ax = plt.subplots()
-    cmap = plt.cm.viridis
-    cmap.set_under('black')  # Set color for obstacles
-    im = ax.imshow(grid, cmap=cmap, interpolation='nearest', vmin=0)
-
-    # Set plot labels and title
-    ax.set_xlabel('X Coordinate')
-    ax.set_ylabel('Y Coordinate')
-    ax.set_title('Grid Animation of Explored Counts with Obstacles')
-
-    # Add colorbar for the legend
-    cbar = fig.colorbar(im, ax=ax)
-    cbar.set_label('Exploration Count')
-
-    # Function to update each frame in the animation
-    def update(frame):
-        nonlocal last_grid
-
-        # Create a temporary grid to store current frame's counts
-        current_grid = np.zeros(grid_size)
-
-        # Update current_grid with the current snapshot
-        for position, count in explored_counts_list[frame].items():
-            y, x = np.unravel_index(position, grid_size)
-            current_grid[y, x] = count
-
-        # Highlight cells that increased in count
-        increased = (current_grid > last_grid) & (current_grid > 0)
-
-        # Clear previous annotations and highlights
-        for txt in ax.texts:
-            txt.remove()
-
-        # Remove previous highlights (patches)
-        for patch in ax.patches:
-            patch.remove()
-
-        # Update the main grid and last_grid for next iteration
-        grid[:] = current_grid
-        last_grid[:] = current_grid
-
-        # Update obstacles in the main grid
-        for position, is_obstacle in enumerate(env_map):
-            if is_obstacle == 1:
-                y, x = np.unravel_index(position, grid_size)
-                grid[y, x] = -1
-
-        im.set_data(grid)
-
-        # Annotating the grid with exploration counts and highlighting changes
-        for (j, i), count in np.ndenumerate(grid):
-            if count > 0:
-                ax.text(i, j, int(count), ha='center', va='center', color='white')
-            if increased[j, i]:
-                # Highlight the increased cell with a red rectangle
-                ax.add_patch(plt.Rectangle((i-0.5, j-0.5), 1, 1, fill=False, edgecolor='red', lw=2))
-
-        return [im]
-
-    # Create the animation
-    anim = FuncAnimation(fig, update, frames=len(explored_counts_list), blit=True)
-
-    # Save the animation as a GIF
-    anim.save(filename, writer='pillow', dpi=dpi)
-
-
-def animate_combined(grid_data, env_map, grid_size, filename='combined_animation.gif', interval=200, dpi=100):
-    """
-    Creates an animation with combined features.
-    :param grid_data: List of dictionaries for each frame. Each dictionary should have keys 'position',
-                      'f_value','lowest_f_value', 'lowest_g_value', and 'visit_count'.
-    :param env_map: 1D array representing the environment map, where 1 indicates an obstacle.
-    :param grid_size: Tuple (width, height) representing the size of the grid.
-    :param filename: Filename for saving the animation.
-    :param interval: Delay between frames in milliseconds.
-    :param dpi: Dots per inch for the saved animation.
-    """
-    grid_size = (grid_size[1], grid_size[0])
-
-    # Initialize grids
-    f_grid = np.full(grid_size, np.inf)  # For storing f values
-    visit_grid = np.zeros(grid_size)     # For storing visit counts
-
-    fig, ax = plt.subplots(figsize=(2 + int(grid_size[0]*1.7), int(grid_size[1]*1.7)))
-    cmap = plt.cm.viridis
-    cmap.set_under('black')  # Set color for obstacles
-    im = ax.imshow(f_grid, cmap=cmap, interpolation='nearest', vmin=0, vmax=np.max([data['lowest_f_value'] for frame in grid_data for data in frame.values() if data['lowest_f_value'] != math.inf]))
-
-    ax.set_xlabel('X Coordinate')
-    ax.set_ylabel('Y Coordinate')
-    ax.set_title('Combined Animation')
-
-    cbar = fig.colorbar(im, ax=ax)
-    cbar.set_label('f Value')
-
-    def update(frame):
-        # Reset grids and annotations
-        f_grid.fill(np.inf)
-        visit_grid.fill(0)
-        for txt in ax.texts:
-            txt.remove()
-        for patch in ax.patches:
-            patch.remove()
-
-        # Update grids and annotations for the current frame
-        for position, data in grid_data[frame].items():
-            y, x = np.unravel_index(position, grid_size)
-            f_grid[y, x] = data['lowest_f_value']
-            visit_grid[y, x] = data['visit_count']
-
-            # Annotate with visit count and g value
-            ax.text(x, y, f"visits:{data['visit_count']}\nlowest g:{data['lowest_g_value']}\nlowest f:{data['lowest_f_value']}\nf:{data['f_value']}", ha='center', va='center', color='white')
-
-            # Highlight current cell with a red patch
-            if data['current']:
-                ax.add_patch(plt.Rectangle((x-0.5, y-0.5), 1, 1, fill=False, edgecolor='red', lw=2))
-
-        # Update obstacles
-        for position, is_obstacle in enumerate(env_map):
-            if is_obstacle == 1:
-                y, x = np.unravel_index(position, grid_size)
-                f_grid[y, x] = -1  # Marking the obstacle
-
-        im.set_data(f_grid)
-
-        return [im]
-
-    anim = FuncAnimation(fig, update, frames=len(grid_data), interval=interval, blit=True)
-    print("saving animation...")
-    anim.save(filename, writer='pillow', dpi=dpi)
-
-
+    plt.close()
 
 def animate_combined_v2(grid_data, env_map, grid_size, filename='combined_animation.gif', interval=200, dpi=100):
     """
@@ -421,7 +216,7 @@ def animate_combined_v2(grid_data, env_map, grid_size, filename='combined_animat
     plt.gca().invert_yaxis()
 
     # Define the figure and axes
-    fig, ax = plt.subplots(figsize=(2 + int(grid_size[0]*1.7), int(grid_size[1]*1.7)))
+    fig, ax = plt.subplots(figsize=(2 + int(grid_size[1]*1.7), int(grid_size[0]*1.7)))
     ax.set_xlim(-0.5, grid_size[1]-0.5)
     ax.set_ylim(-0.5, grid_size[0]-0.5)
     ax.set_xlabel('X Coordinate')
@@ -430,7 +225,9 @@ def animate_combined_v2(grid_data, env_map, grid_size, filename='combined_animat
 
     # Define the colormap and normalization
     cmap = plt.cm.viridis
-    norm = mcolors.Normalize(vmin=0, vmax=np.max([data['orientations'][0]['min_f_value'] for frame in grid_data for data in frame.values() if data['orientations'][0]['min_f_value'] != math.inf]))
+    values = [data['orientations'][0]['min_f_value'] for frame in grid_data for data in frame.values() if data['orientations'][0]['min_f_value'] != math.inf]
+    maximum = max(values or [0])
+    norm = mcolors.Normalize(vmin=0, vmax=maximum)
 
     # Function to update each frame in the animation
     def update(frame):
@@ -478,3 +275,4 @@ def animate_combined_v2(grid_data, env_map, grid_size, filename='combined_animat
     anim = FuncAnimation(fig, update, frames=len(grid_data), interval=interval)
     print("saving animation...")
     anim.save(filename, writer='pillow', dpi=dpi)
+    plt.close()

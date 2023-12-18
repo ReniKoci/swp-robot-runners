@@ -1,3 +1,4 @@
+import random
 import unittest
 from copy import deepcopy
 from itertools import cycle
@@ -79,18 +80,18 @@ def print_grid(env: Env):
     # Mark obstacles
     for i in range(env.rows * env.cols):
         if env.map[i] == 1:
-            y, x = np.unravel_index(i, (env.cols, env.rows))
+            x, y = i % env.cols, i // env.cols
             grid[y][x] = '███'
 
     # Mark goal locations
     for idx, goals in enumerate(env.goal_locations):
-        for goal_cell_index in goals:
-            y, x = np.unravel_index(goal_cell_index[0], (env.cols, env.rows))
+        for goal_cell_index, _ in goals:
+            x, y = goal_cell_index % env.cols, goal_cell_index // env.cols
             grid[y][x] = f'G{idx:02d}'
 
     # Place robots with their index
     for idx, state in enumerate(env.curr_states):
-        y, x = np.unravel_index(state.location, (env.cols, env.rows))
+        x, y = state.location % env.cols, state.location // env.cols
         grid[y][x] = f'R{idx}{orientation_symbols[state.orientation]}'
 
     # Print the grid with horizontal and vertical lines
@@ -166,6 +167,9 @@ def animate_grid(envs: list, filename='lifelong_animation.gif', interval=200):
 
 
 class PlannerTest(unittest.TestCase):
+    def setUp(self):
+        random.seed(42)
+
     def get_test_env(self) -> Env:
         grid = [  # 0 - empty; 1 - wall; "<i><o>" i - robot nr (has to be bigger than 0) o - orientation (<>v^)
             [0, 0000, 0, 0],
@@ -223,7 +227,7 @@ class PlannerTest(unittest.TestCase):
         self.assertListEqual(neighbors, [(5, 3), (5, 1)])
 
     def test_basic_planning_one_step(self):
-        planner = SpaceTimeAStarPlanner(visualize=True)
+        planner = SpaceTimeAStarPlanner(visualize=True, animate=True)
         planner.env = env = self.get_test_env()
         print_grid(env)
         actions = planner.plan(None)
@@ -337,10 +341,14 @@ class PlannerTest(unittest.TestCase):
         for robot_state, goal in zip(env.curr_states, env.goal_locations):
             self.assertEqual(robot_state.location, goal[0][0])
 
-    def test_time_horizon_deadlock_avoidence(self):
-        # todo: how to deal with this?
-        #  idea: prereserve all cells where it is clear that that the robot cannot escape in one move
-        #  otherwise we can end up in an unnecessary deadlock
+    def test_time_horizon_deadlock_avoidance_5(self):
+        # why is there a deadlock for 3, 5 and 4, 4? because robot 1 wants to go to the left and robot
+        # 2 has no way that does not lead to a collision when he reaches the left wall
+        # fix:
+        # - random restarts - (heuristic like "robot nearest to its goal first" would also fail here!
+        # - increase time horizon
+        # 4 - 4 deadlock: idea: preserve all cells where it is clear that the robot cannot escape in one move
+        #   otherwise we can end up in an unnecessary deadlock
         grid = [
             [0, 0000, 0, 0, 0, 0, 0, 0, 0, 0, 0000, 0],
             [0, 0000, 1, 1, 1, 1, 1, 1, 1, 1, 0000, 0],
@@ -353,50 +361,24 @@ class PlannerTest(unittest.TestCase):
             [1, 0000, 0, 0, 0, 0, 0, 0, 0, 0, 0000, 2],
             [0, 0000, 0, 0, 0, 0, 0, 0, 0, 0, 0000, 0]
         ]
-        env = grids_to_env(grid, goal_grid, "hallway")
-        planner = SpaceTimeAStarPlanner(replanning_period=4, time_horizon=4)
-        planner.env = env
-        all_envs = [deepcopy(env)]
-        actions = planner.plan(None)
-        env = update_env(env, actions)
-        all_envs.append(deepcopy(env))
-        self.assertEqual(Action(actions[0]), Action.FW)
-        self.assertEqual(Action(actions[1]), Action.FW)
-        while True:
+        for replanning_period, time_horizon, expected_actions in [[3, 5, (Action.FW, Action.FW)],
+                                                                  [4, 4, (Action.FW, Action.FW)],
+                                                                  [4, 8, (Action.FW, Action.CCR)]]:
+            env = grids_to_env(grid, goal_grid, "hallway")
+            planner = SpaceTimeAStarPlanner(replanning_period=replanning_period, time_horizon=time_horizon,
+                                            visualize=True)
+            planner.env = env
+            all_envs = [deepcopy(env)]
             actions = planner.plan(None)
             env = update_env(env, actions)
             all_envs.append(deepcopy(env))
-            if all(a == Action.W.value for a in actions):
-                break
-        animate_grid(all_envs)
-
-    def test_time_horizon_deadlock_avoidence(self):
-        # todo: why is there a deadlock?
-        grid = [
-            [0, 0000, 0, 0, 0, 0, 0, 0, 0, 0, 0000, 0],
-            [0, 0000, 1, 1, 1, 1, 1, 1, 1, 1, 0000, 0],
-            [0, "2>", 0, 0, 0, 0, 0, 0, 0, 0, "1<", 0],
-            [0, 0000, 1, 1, 1, 1, 1, 1, 1, 1, 0000, 0]
-        ]
-        goal_grid = [
-            [0, 0000, 0, 0, 0, 0, 0, 0, 0, 0, 0000, 0],
-            [0, 0000, 0, 0, 0, 0, 0, 0, 0, 0, 0000, 0],
-            [1, 0000, 0, 0, 0, 0, 0, 0, 0, 0, 0000, 2],
-            [0, 0000, 0, 0, 0, 0, 0, 0, 0, 0, 0000, 0]
-        ]
-        env = grids_to_env(grid, goal_grid, "hallway")
-        planner = SpaceTimeAStarPlanner(replanning_period=3, time_horizon=5)
-        planner.env = env
-        all_envs = [deepcopy(env)]
-        actions = planner.plan(None)
-        env = update_env(env, actions)
-        all_envs.append(deepcopy(env))
-        #self.assertEqual(Action(actions[0]), Action.FW)
-        #self.assertEqual(Action(actions[1]), Action.FW)
-        for i in range(20):
-            actions = planner.plan(None)
-            env = update_env(env, actions)
-            all_envs.append(deepcopy(env))
-            #if all(a == Action.W.value for a in actions):
-            #    break
-        animate_grid(all_envs)
+            self.assertEqual(Action(actions[0]), expected_actions[0])
+            self.assertEqual(Action(actions[1]), expected_actions[1])
+            for i in range(20):
+                actions = planner.plan(None)
+                env = update_env(env, actions)
+                all_envs.append(deepcopy(env))
+                # print_grid(env)
+                if all(a == Action.W.value for a in actions):
+                    break
+            animate_grid(all_envs)
