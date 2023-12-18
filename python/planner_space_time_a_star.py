@@ -8,26 +8,25 @@ from python.visualization_a_star import AStarVisualizer
 
 
 class SpaceTimeAStarPlanner(BasePlanner):
-    reservation: Set[Tuple[int, int, int]] = set()
-    # (cell id 1, cell id 2, timestep relative to current timestep [one_based])
-    cell_hash_to_robot_id: dict[Tuple[int, int, int], int] = {}
-    # (cell id, -1, timestep [one_based]): robot id
-    next_actions = list[list[int]]
-    # next action for each robot
-    last_planning_step = -math.inf
-    replanning_period = 2  # only replan every nth step
-    time_horizon = 10  # how many steps to plan ahead
-
-    VISUALIZE = False
 
     def __init__(self, pyenv=None, visualize=False, animate=False, replanning_period=2, time_horizon=10) -> None:
         super().__init__(pyenv, "Space-Time-A-Star-Planner")
+        self.reservation: Set[Tuple[int, int, int]] = set()
+        # (cell id 1, cell id 2, timestep relative to current timestep [one_based])
+        self.edge_hash_to_robot_id: dict[Tuple[int, int, int], int] = {}
+        # (cell id, -1, timestep [one_based]): robot id
+        self.next_actions: list[list[int]]
+        # next action for each robot
+        self.last_planning_step = -math.inf
+
         self.replanning_period = replanning_period
         self.time_horizon = time_horizon
+
+        self.VISUALIZE = visualize
         if visualize:
-            self.VISUALIZE = True
             self.visualizer = AStarVisualizer()
             self.visualizer.GENERATE_ANIMATIONS = animate
+        random.seed(42)
 
     def initialize(self, preprocess_time_limit: int):
         return True  # todo: implement preprocessing or optimal pathfinding
@@ -35,7 +34,6 @@ class SpaceTimeAStarPlanner(BasePlanner):
     def plan(self, time_limit) -> list[int]:
         if self.last_planning_step + self.replanning_period <= self.env.curr_timestep:
             self.last_planning_step = self.env.curr_timestep
-            print("plan")
             return self.sample_priority_planner(time_limit)
         else:
             return self.next_actions[self.env.curr_timestep - self.last_planning_step]
@@ -153,7 +151,10 @@ class SpaceTimeAStarPlanner(BasePlanner):
         # todo only do replanning each nth step
         # todo: stop when time_limit is reached?
         # todo: implement random restarts
+        # todo: do replan (or only plan for specific agents) when some agent reached his goal
         self.reservation = set()
+        self.edge_hash_to_robot_id = {}
+
         self.next_actions = [[Action.W.value]*len(self.env.curr_states) for _ in range(self.replanning_period)]
 
         # reserve waiting cell for all robots that don't have any goals left
@@ -236,15 +237,17 @@ class SpaceTimeAStarPlanner(BasePlanner):
             end = start
         cell_hash = (end, -1, time_step)
         self.reservation.add(cell_hash)  # reserve the end cell itself
+        self.edge_hash_to_robot_id[cell_hash] = robot_index  # to make it easy to lookup which robot reserved which cell
         if start != end:
             edge_hash = (start, end, time_step)
             self.reservation.add(edge_hash)  # reserve the edge
-        self.cell_hash_to_robot_id[cell_hash] = robot_index  # to make it easy to lookup which robot reserved which cell
+            self.edge_hash_to_robot_id[edge_hash] = robot_index  # to make it easy to lookup which robot reserved which edge
 
     def handle_conflict(self, start: int, end: int, time_step: int):
         # todo: revoke all the reservations of the robot that reserved (start, end, time_step)
         # todo: check if there is an easy & quick reroute of the colliding robot possible
-        colliding_robot_id = self.cell_hash_to_robot_id[(start, end, time_step)]
+        colliding_robot_id = self.edge_hash_to_robot_id[(start, end, time_step)]
+        self.revoke_all_reservations_of_robot(colliding_robot_id)
         for step in range(self.replanning_period):
             self.next_actions[step][colliding_robot_id] = Action.W.value  # make colliding robot wait
             # if the colliding robot which will now wait would collide with another robot -> stop the other robot also
@@ -253,3 +256,13 @@ class SpaceTimeAStarPlanner(BasePlanner):
             if self.is_reserved(*wait_cell_hash_of_stopped_robot):
                 self.handle_conflict(*wait_cell_hash_of_stopped_robot)
             self.add_reservation(*wait_cell_hash_of_stopped_robot, colliding_robot_id)
+
+    def revoke_all_reservations_of_robot(self, robot_id: int):
+        """
+        remove all reservations of a robot
+        :param robot_id: id of the robot
+        """
+        for edge_hash, r_id in list(self.edge_hash_to_robot_id.items()):
+            if r_id == robot_id:
+                self.reservation.remove(edge_hash)
+                del self.edge_hash_to_robot_id[edge_hash]

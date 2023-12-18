@@ -292,7 +292,8 @@ class PlannerTest(unittest.TestCase):
         planner = SpaceTimeAStarPlanner()
         planner.env = env
         actions = planner.plan(None)
-        self.assertNotEqual(actions, [Action.W.value, Action.W.value])
+        # they should wait, because there is no valid path
+        self.assertEqual(actions, [Action.W.value, Action.W.value])
 
     def test_wait_until_blocking_robot_moved(self):
         grid = [
