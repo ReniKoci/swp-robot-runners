@@ -3,6 +3,7 @@ build
 Dockerfile
 venv
 .end
+.idea
 test.json
 local
 compile.sh
