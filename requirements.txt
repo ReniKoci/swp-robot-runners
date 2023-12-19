@@ -8,3 +8,5 @@ pre-commit
 pylint
 black
 pydebug
+matplotlib
+pillow
