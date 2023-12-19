@@ -5,7 +5,6 @@ from typing import Tuple, Set
 from queue import PriorityQueue
 from python.models import Action, BasePlanner
 from python.util import getManhattanDistance, get_neighbors
-from python.visualization_a_star import AStarVisualizer
 
 
 class SpaceTimeAStarPlanner(BasePlanner):
@@ -26,6 +25,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
 
         self.VISUALIZE = visualize
         if visualize:
+            from python.visualization_a_star import AStarVisualizer
             self.visualizer = AStarVisualizer()
             self.visualizer.GENERATE_ANIMATIONS = animate
         random.seed(42)
@@ -292,7 +292,6 @@ class SpaceTimeAStarPlanner(BasePlanner):
             self.edge_hash_to_robot_id[edge_hash] = robot_index  # to make it easy to lookup which robot reserved which edge
 
     def handle_conflict(self, start: int, end: int, time_step: int):
-        # todo: revoke all the reservations of the robot that reserved (start, end, time_step)
         # todo: check if there is an easy & quick reroute of the colliding robot possible
         colliding_robot_id = self.edge_hash_to_robot_id[(start, end, time_step)]
         self.revoke_all_reservations_of_robot(colliding_robot_id)

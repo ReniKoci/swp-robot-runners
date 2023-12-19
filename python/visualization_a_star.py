@@ -59,7 +59,6 @@ class AStarVisualizer:
         if current_pos not in self.lowest_g_values or g < self.lowest_g_values[current_pos]:
             self.lowest_g_values[current_pos] = g  # found a lower g value
 
-        # self.current_f_values_v2[(position, orientation)] = [g+h] # todo: do we need this?
         for node in open_list.queue:
             f = node[0]
             pos = node[3][0]

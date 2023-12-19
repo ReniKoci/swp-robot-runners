@@ -4,7 +4,7 @@ import os
 
 
 class pyMAPFPlanner:  # this is the wrapper class that will be called by the c++ application
-    planner: BasePlanner  # todo: your planner should inherit from BasePlanner
+    planner: BasePlanner  # your planner should inherit from BasePlanner
 
     def __init__(self, pyenv=None, desired_planner="astar") -> None:
         if desired_planner is None:
