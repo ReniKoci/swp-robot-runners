@@ -1,9 +1,86 @@
+from typing import Optional
 from queue import PriorityQueue
+
 from python.models import Env, Action
 
 
-def single_agent_plan(env, start: int, start_direct: int, end: int):
-    print(start, start_direct, end)
+class DistanceMap:
+    """
+    A class that can be used to calculate the shortest distance from a given cell to a target cell.
+    It uses the A* algorithm to calculate the distance.
+    The distances are saved. If a distance is requested for a cell that hasn't been visited yet, the distance is
+    calculated efficiently by using the previous distances.
+    """
+    def __init__(self, target: int, env: Env):
+        number_of_cells = len(env.map)
+        self.target: int = target
+        self.open_list: PriorityQueue[
+            tuple[int, int, int, int, int]] = PriorityQueue()  # f, h, g, position, orientation
+        self.close_list: set = set()
+        self.distance_map: list[Optional[int]] = [None] * (number_of_cells * 4)
+        self.last_start = None
+
+    def get_distance(self, env: Env, start_cell: int, start_orientation: int) -> int:
+        """
+        Returns the shortest distance from start_cell to the target cell.
+        Only calculates the distance if it hasn't been calculated before.
+        :param env:
+        :param start_cell:
+        :param start_orientation:
+        :return:
+        """
+        if self.open_list.empty() and self.close_list:
+            raise RuntimeError(f"no valid path found from {start_cell} to {self.target}")
+
+        # add target as starting point if this is the first call
+        if self.open_list.empty():
+            for orientation in range(4):
+                g = 0
+                h = getManhattanDistance(env, self.target, start_cell)
+                f = g + h
+                self.open_list.put((f, h, g, self.target, orientation))
+                self.distance_map[self.target * 4 + orientation] = 0
+
+        if (dist := self.distance_map[start_cell * 4 + start_orientation]) is not None:
+            return dist
+
+        if self.last_start != start_cell:
+            # update all h values in open_list
+            new_open_list = PriorityQueue()
+            while not self.open_list.empty():
+                f, h, g, position, orientation = self.open_list.get()
+                h = getManhattanDistance(env, position, start_cell)
+                f = g + h
+                new_open_list.put((f, h, g, position, orientation))
+            self.open_list = new_open_list
+            self.last_start = start_cell
+
+        # do backwards A* to get distance (target -> start_cell)
+        target = start_cell
+        target_orientation = start_orientation
+        while not self.open_list.empty():
+            f, h, g, position, orientation = (self.open_list.get())
+            self.close_list.add(position * 4 + orientation)
+            neighbors = get_neighbors(env, position, orientation)
+            for neighbor in neighbors:
+                neighbor_position, neighbor_orientation = neighbor
+                if (neighbor_position * 4 + neighbor_orientation) in self.close_list:
+                    continue
+                neighbor_g = g + 1
+                neighbor_h = getManhattanDistance(env, neighbor_position, target)
+                neighbor_f = neighbor_g + neighbor_h
+                self.open_list.put((neighbor_f, neighbor_h, neighbor_g, neighbor_position, neighbor_orientation))
+
+                pos_ori_hash = neighbor_position * 4 + neighbor_orientation
+                shortest_distance = self.distance_map[pos_ori_hash]
+                if shortest_distance is None or neighbor_g < shortest_distance:
+                    self.distance_map[pos_ori_hash] = neighbor_g
+                if neighbor_position == target and neighbor_orientation == target_orientation:
+                    return neighbor_g
+        raise RuntimeError(f"no valid path found from {start_cell} to {self.target}")
+
+
+def a_star(env, start: int, start_direct: int, end: int):
     path = []
     # AStarNode (u,dir,t,f)
     open_list = PriorityQueue()
@@ -25,8 +102,7 @@ def single_agent_plan(env, start: int, start_direct: int, end: int):
             path.reverse()
 
             break
-        neighbors = get_neighbors(env, curr[0], curr[1])
-        # print("neighbors=",neighbors)
+        neighbors = get_neighbors(env, curr[0], curr[1], reverse=True)
         for neighbor in neighbors:
             if (neighbor[0] * 4 + neighbor[1]) in close_list:
                 continue
@@ -38,7 +114,6 @@ def single_agent_plan(env, start: int, start_direct: int, end: int):
             )
             parent[(next_node[0], next_node[1])] = (curr[0], curr[1])
             open_list.put([next_node[3] + next_node[2], next_node])
-    print(path)
     return path
 
 
@@ -62,9 +137,10 @@ def validateMove(env, loc: int, loc2: int) -> bool:
     return True
 
 
-def get_neighbors(env: Env, location: int, direction: int) -> list[tuple[int, int]]:
+def get_neighbors(env: Env, location: int, direction: int, reverse=False) -> list[tuple[int, int]]:
     """
     returns all possible position-orientation combinations that can be reached after one time step (move forward, turn left, turn right)
+    :param reverse: set to True to get the neighbors for backwards A*
     :param env: the env obj
     :param location: the current node index
     :param direction: the current orientation
@@ -72,12 +148,20 @@ def get_neighbors(env: Env, location: int, direction: int) -> list[tuple[int, in
     """
     neighbors = []
     # forward
-    candidates = [
-        location + 1,
-        location + env.cols,
-        location - 1,
-        location - env.cols,
-    ]
+    if reverse:
+        candidates = [
+            location + 1,
+            location + env.cols,
+            location - 1,
+            location - env.cols,
+        ]
+    else:
+        candidates = [
+            location - 1,
+            location - env.cols,
+            location + 1,
+            location + env.cols,
+        ]
     forward = candidates[direction]
     new_direction = direction
     is_valid_move = forward >= 0 and forward < len(env.map) and validateMove(env, forward, location)
@@ -99,13 +183,10 @@ def get_neighbors(env: Env, location: int, direction: int) -> list[tuple[int, in
 
 
 def naive_a_star(env: Env, time_limit):
-    print("I am planning")
     actions = [Action.W for i in range(len(env.curr_states))]
     for i in range(0, env.num_of_agents):
-        print("python start plan for agent ", i, end=" ")
         path = []
         if len(env.goal_locations[i]) == 0:
-            print(i, " does not have any goal left", end=" ")
             path.append(
                 (
                     env.curr_states[i].location,
@@ -113,8 +194,7 @@ def naive_a_star(env: Env, time_limit):
                 )
             )
         else:
-            print(" with start and goal: ", end=" ")
-            path = single_agent_plan(
+            path = a_star(
                 env,
                 env.curr_states[i].location,
                 env.curr_states[i].orientation,
@@ -134,3 +214,14 @@ def naive_a_star(env: Env, time_limit):
     actions = [int(a) for a in actions]
     # print(actions)
     return actions  # np.array(actions, dtype=int)
+
+
+def convert_1d_to_2d_coordinate(location: int, cols: int) -> tuple[int, int]:
+    y = location // cols
+    x = location % cols
+    return x, y
+
+
+def convert_2d_to_1d_coordinate(coordinate: tuple[int, int], cols: int) -> int:
+    x, y = coordinate
+    return y * cols + x
