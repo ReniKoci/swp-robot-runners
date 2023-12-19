@@ -2,7 +2,7 @@ from queue import PriorityQueue
 from python.models import Env, Action
 
 
-def single_agent_plan(env, start: int, start_direct: int, end: int):
+def single_agent_plan(env: Env, start: int, start_direct: int, end: int):
     print(start, start_direct, end)
     path = []
     # AStarNode (u,dir,t,f)
@@ -42,7 +42,7 @@ def single_agent_plan(env, start: int, start_direct: int, end: int):
     return path
 
 
-def getManhattanDistance(env, loc1: int, loc2: int) -> int:
+def getManhattanDistance(env: Env, loc1: int, loc2: int) -> int:
     loc1_x = loc1 // env.cols
     loc1_y = loc1 % env.cols
     loc2_x = loc2 // env.cols
@@ -50,7 +50,7 @@ def getManhattanDistance(env, loc1: int, loc2: int) -> int:
     return abs(loc1_x - loc2_x) + abs(loc1_y - loc2_y)
 
 
-def validateMove(env, loc: int, loc2: int) -> bool:
+def validateMove(env: Env, loc: int, loc2: int) -> bool:
     loc_x = loc // env.cols
     loc_y = loc % env.cols
     if loc_x >= env.rows or loc_y >= env.cols or env.map[loc] == 1:
@@ -134,3 +134,63 @@ def naive_a_star(env: Env, time_limit):
     actions = [int(a) for a in actions]
     # print(actions)
     return actions  # np.array(actions, dtype=int)
+
+
+def forward(env: Env, current_pos: int, current_dir: int) -> int:
+    current_dir == current_dir%4
+    new_pos = -1
+    if current_dir == 0:
+        if current_pos%env.rows < env.rows - 1:
+            new_pos = current_pos + 1
+    elif current_dir == 1:
+        if current_pos//env.rows < env.cols - 1:
+            new_pos = current_pos + env.rows
+    elif current_dir == 2:
+        if current_pos%env.rows > 0:
+            new_pos = current_pos - 1
+    elif current_dir == 3:
+        if current_pos//env.rows > 0:
+            new_pos = current_pos - env.rows
+    if env.map[new_pos] == 1:
+        new_pos = -1
+    return new_pos
+
+
+def counter_clockwise_rotate(current_dir: int) -> int:
+    return (current_dir + 3)%4
+
+
+def clockwise_rotate(current_dir: int) -> int:
+    return (current_dir + 1)%4
+
+
+def reverse(current_dir: int) -> int:
+    return (current_dir + 2)%4
+
+
+distance_maps = []
+def init_distance_maps(env: Env):
+    print("Initialize distance map")
+    self.distance_maps = [None]*env.rows*env.cols
+
+def access_distance_maps(env: Env, start_pos: int, start_dir: int, goal: int):
+    if self.distance_maps[goal] == None:
+        print("Calculate Distance map for", goal)
+        self.distance_maps[goal] = [None]*env.rows*env.cols
+        for i in range(len(self.distance_maps[goal])):
+            self.distance_maps[goal][i] = [None]*4
+
+        pos_dir_set = [(goal, 0, 0), (goal, 1, 0), (goal, 2, 0), (goal, 3, 0)]
+        for pos, dir, costs in pos_dir_set:
+            if self.distance_maps[goal][pos][dir] == None:
+                self.distance_maps[goal][pos][dir] = costs
+                backward = self.forward(pos, self.reverse(dir))
+                if backward >= 0 and (backward, dir) not in [(x[0], x[1]) for x in pos_dir_set]:
+                    pos_dir_set.append((backward, dir, costs + 1))
+                ccr = self.counter_clockwise_rotate(dir)
+                if (pos, ccr) not in [(x[0], x[1]) for x in pos_dir_set]:
+                    pos_dir_set.append((pos, ccr, costs + 1))
+                cr = self.clockwise_rotate(dir)
+                if (pos, cr) not in [(x[0], x[1]) for x in pos_dir_set]:
+                    pos_dir_set.append((pos, cr, costs + 1))
+    return self.distance_maps[goal][start_pos][start_dir]
