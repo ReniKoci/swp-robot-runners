@@ -3,6 +3,11 @@ from dataclasses import dataclass
 from enum import Enum
 
 
+class Heuristic(Enum):
+    MANHATTAN = 0
+    TRUE_DISTANCE = 1
+
+
 class Action(Enum):
     FW = 0
     CR = 1

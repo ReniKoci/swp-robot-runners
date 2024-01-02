@@ -61,7 +61,7 @@ class DistanceMap:
         while not self.open_list.empty():
             f, h, g, position, orientation = (self.open_list.get())
             self.close_list.add(position * 4 + orientation)
-            neighbors = get_neighbors(env, position, orientation)
+            neighbors = get_neighbors(env, position, orientation, reverse=True)
             for neighbor in neighbors:
                 neighbor_position, neighbor_orientation = neighbor
                 if (neighbor_position * 4 + neighbor_orientation) in self.close_list:
@@ -147,21 +147,23 @@ def get_neighbors(env: Env, location: int, direction: int, reverse=False) -> lis
     :return: list of two or three tuples[node index, orientation]
     """
     neighbors = []
-    # forward
     if reverse:
+        # backwards
         candidates = [
-            location + 1,
-            location + env.cols,
             location - 1,
             location - env.cols,
+            location + 1,
+            location + env.cols,
         ]
     else:
+        # forwards
         candidates = [
-            location - 1,
-            location - env.cols,
             location + 1,
             location + env.cols,
-        ]
+            location - 1,
+            location - env.cols,
+            ]
+
     forward = candidates[direction]
     new_direction = direction
     is_valid_move = forward >= 0 and forward < len(env.map) and validateMove(env, forward, location)

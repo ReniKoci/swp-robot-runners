@@ -3,13 +3,14 @@ import random
 from copy import copy
 from typing import Tuple, Set
 from queue import PriorityQueue
-from python.models import Action, BasePlanner
-from python.util import getManhattanDistance, get_neighbors
+from python.models import Action, BasePlanner, Heuristic
+from python.util import getManhattanDistance, get_neighbors, DistanceMap
 
 
 class SpaceTimeAStarPlanner(BasePlanner):
 
-    def __init__(self, pyenv=None, visualize=False, animate=False, replanning_period=2, time_horizon=10, restarts=True) -> None:
+    def __init__(self, pyenv=None, visualize=False, animate=False, replanning_period=2, time_horizon=10, restarts=True,
+                 heuristic: Heuristic = Heuristic.TRUE_DISTANCE) -> None:
         super().__init__(pyenv, "Space-Time-A-Star-Planner")
         self.reservation: Set[Tuple[int, int, int]] = set()
         # (cell id 1, cell id 2, timestep relative to current timestep [one_based])
@@ -22,6 +23,9 @@ class SpaceTimeAStarPlanner(BasePlanner):
         self.replanning_period = replanning_period
         self.time_horizon = time_horizon
         self.random_restarts = restarts
+
+        self.heuristic = heuristic  # todo: make configurable via os env
+        self.distance_maps = {}  # in here we store the distance map for each target cell while ignoring robots
 
         self.VISUALIZE = visualize
         if visualize:
@@ -65,7 +69,8 @@ class SpaceTimeAStarPlanner(BasePlanner):
                     tried_priority_orders.add(new_priority_order)
                     break
             _, new_path_length_sum, new_waiting_robots = self.sample_priority_planner(time_limit, new_priority_order)
-            if new_waiting_robots < min_waiting_robots or (new_waiting_robots == min_waiting_robots and new_path_length_sum < min_path_length_sum):
+            if new_waiting_robots < min_waiting_robots or (
+                    new_waiting_robots == min_waiting_robots and new_path_length_sum < min_path_length_sum):
                 min_waiting_robots = new_waiting_robots
                 min_path_length_sum = new_path_length_sum
                 best_next_actions = copy(self.next_actions)
@@ -75,7 +80,37 @@ class SpaceTimeAStarPlanner(BasePlanner):
         #  lowest sum of path lengths, lowest number of waiting robots, lowest sum of h values
         #  (caution: when an agent reaches its goal, he will get a new target with a new bigger h)
 
+    def get_heuristic_value(self, start: int, orientation: int, end: int) -> int:
+        """
+        get the heuristic value for the given start and end cell
+        :param orientation: orientation of the robot
+        :param start: start cell index
+        :param end: end cell index
+        :return: the heuristic value
+        """
+        if self.heuristic == Heuristic.TRUE_DISTANCE:
+            return self.get_true_distance(start, orientation, end)
+        elif self.heuristic == Heuristic.MANHATTAN:
+            return getManhattanDistance(self.env, start, end)
+        else:
+            raise RuntimeError(f"unknown heuristic {self.heuristic}")
 
+    def get_true_distance(self, start: int, start_orientation: int, end: int) -> int:
+        """
+        get the true distance between two cells
+        :param start_orientation: orientation of the robot
+        :param start: start cell index
+        :param end: end cell index
+        :return: the true distance
+        """
+        if start == end:
+            return 0
+        if end in self.distance_maps:
+            distance_map = self.distance_maps[end]
+        else:
+            distance_map = DistanceMap(end, self.env)
+            self.distance_maps[end] = distance_map
+        return distance_map.get_distance(self.env, start, start_orientation)
 
     def space_time_plan(
             self,
@@ -98,7 +133,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
         if self.VISUALIZE:
             self.visualizer.reset()
 
-        h = getManhattanDistance(self.env, start, end)  # heuristic approximation
+        h = self.get_heuristic_value(start, start_direct, end)  # heuristic approximation
         g = 0  # distance traveled
         node_info = (start, start_direct, g, h)
         open_list.put((g + h, h, id(node_info), node_info))
@@ -150,7 +185,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
                         old = (old[0], old[1], g + 1, old[3], old[4])
                 else:
                     next_g = g + 1
-                    next_h = getManhattanDistance(self.env, neighbor_location, end)
+                    next_h = self.get_heuristic_value(neighbor_location, neighbor_direction, end)
                     next_node_info = (
                         neighbor_location,
                         neighbor_direction,
@@ -201,7 +236,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
         path_length_sum = 0
         waiting_robots = 0
 
-        self.next_actions = [[Action.W.value]*len(self.env.curr_states) for _ in range(self.replanning_period)]
+        self.next_actions = [[Action.W.value] * len(self.env.curr_states) for _ in range(self.replanning_period)]
 
         # reserve waiting cell for all robots that don't have any goals left
         robot_order = robot_order or range(self.env.num_of_agents)
@@ -263,7 +298,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
                 # there is no path for robot i -> he will wait -> reserve his waiting position BUT:
                 # it is possible that the waiting cell is already reserved -> the robot that reserved the cell has to be stopped
                 # to prevent a crash
-                for step in range(self.replanning_period):
+                for step in range(self.time_horizon):
                     waiting_position = (last_loc, -1, step + 1)
                     if self.is_reserved(*waiting_position):
                         # check who reserved it and cancel his actions
@@ -289,7 +324,8 @@ class SpaceTimeAStarPlanner(BasePlanner):
         if start != end:
             edge_hash = (start, end, time_step)
             self.reservation.add(edge_hash)  # reserve the edge
-            self.edge_hash_to_robot_id[edge_hash] = robot_index  # to make it easy to lookup which robot reserved which edge
+            self.edge_hash_to_robot_id[
+                edge_hash] = robot_index  # to make it easy to lookup which robot reserved which edge
 
     def handle_conflict(self, start: int, end: int, time_step: int):
         # todo: check if there is an easy & quick reroute of the colliding robot possible

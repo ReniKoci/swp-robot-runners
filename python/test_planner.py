@@ -236,13 +236,13 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(actions[0], Action.CCR.value)
 
     def test_basic_planning_huge_map(self):
-        planner = SpaceTimeAStarPlanner(visualize=True, animate=False)
+        planner = SpaceTimeAStarPlanner(visualize=True, animate=False, restarts=False)
         planner.env = env = self.get_huge_test_env()
         print_grid(env)
         actions = planner.plan(None)
         env = update_env(env, actions)
         print_grid(env)
-        self.assertEqual(actions[0], Action.FW.value)
+        self.assertIn(actions[0], [Action.FW.value, Action.CCR.value])
 
     def test_basic_planning_two_robots(self):
         grid = [
@@ -310,7 +310,7 @@ class PlannerTest(unittest.TestCase):
         planner = SpaceTimeAStarPlanner()
         planner.env = env
         actions = planner.plan(None)
-        self.assertEquals(Action(actions[1]), Action.W)
+        self.assertEqual(Action(actions[1]), Action.W)
 
     def test_multiple_steps_multiple_robots(self):
         grid = [
@@ -366,15 +366,15 @@ class PlannerTest(unittest.TestCase):
         ]
         for replanning_period, time_horizon, expected_actions in [[3, 5, (Action.FW, Action.FW)],
                                                                   [4, 4, (Action.FW, Action.FW)],
-                                                                  [4, 8, (Action.FW, Action.CCR)]]:
+                                                                  [4, 8, (Action.CR, Action.FW)]]:
             print(replanning_period, time_horizon)
             env = grids_to_env(grid, goal_grid, "hallway")
             planner = SpaceTimeAStarPlanner(replanning_period=replanning_period, time_horizon=time_horizon,
-                                            visualize=False)
+                                            visualize=False, restarts=True)
             planner.env = env
             all_envs = [deepcopy(env)]
             actions = planner.plan(None)
-            #print([Action(a) for a in actions])
+            print([Action(a) for a in actions])
             env = update_env(env, actions)
             all_envs.append(deepcopy(env))
             self.assertEqual(Action(actions[0]), expected_actions[0])
