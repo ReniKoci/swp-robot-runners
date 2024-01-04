@@ -7,12 +7,27 @@ import argparse
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+import itertools
 
 
 # compilation
 def compile_code():
     compile_cmd = "sh compile.sh"
     subprocess.run(compile_cmd, shell=True, check=True)
+
+
+def combine_config_options(args):
+    # give default values in case nothing is specified for a configuration
+    heuristics = args.config.get('heuristic', ['manhattan'])
+    time_horizons = args.config.get('timeHorizon', [4])
+    replanning_periods = args.config.get('replanningPeriod', [2])
+
+    combinations = itertools.product(heuristics, time_horizons, replanning_periods)
+    return combinations
+
+
+def set_env_var(key, value):
+    os.environ[key] = str(value)
 
 
 def plot_results(folder):
@@ -25,7 +40,7 @@ def plot_results(folder):
     df = pd.DataFrame(data)
 
     # Create a pivot table for tasks_finished
-    pivot_tasks_finished = df.pivot_table(index='heuristic', columns=['timeHorizon', 'replanningPeriod'],
+    pivot_tasks_finished = df.pivot_table(index='heuristic', columns=['time_horizon', 'replanning_period'],
                                           values='tasks_finished')
 
     plt.figure(figsize=(12, 8))
@@ -38,7 +53,7 @@ def plot_results(folder):
 
     # Create a bar plot for execution_time
     plt.figure(figsize=(12, 8))
-    sns.barplot(x='heuristic', y='execution_time', hue='timeHorizon', data=df)
+    sns.barplot(x='heuristic', y='execution_time', hue='time_horizon', data=df)
     plt.xlabel("Heuristic")
     plt.ylabel("Execution Time (seconds)")
     plt.title("Execution Time vs. Heuristic (Time Horizon as Hue)")
@@ -49,7 +64,7 @@ def plot_results(folder):
 
     # Create a bar plot for tasks_finished
     plt.figure(figsize=(12, 8))
-    sns.barplot(x='heuristic', y='tasks_finished', hue='timeHorizon', data=df)
+    sns.barplot(x='heuristic', y='tasks_finished', hue='time_horizon', data=df)
     plt.xlabel("Heuristic")
     plt.ylabel("Tasks Finished")
     plt.title("Tasks Finished vs. Heuristic (Time Horizon as Hue)")
@@ -92,19 +107,29 @@ def run_code(input_files, output_file_folder, args):
     iterations = args.iterations
 
     # get all configs, if a parameter is not specfified, the list will be empty
-    if args.config is not None:
-        heuristics = args.config.get('heuristic', [])
-        time_horizon = args.config.get('timeHorizon', [])
-        replanning_period = args.config.get('replanningPeriod', [])
+    configs = combine_config_options(args)
 
     # create a list to store results
     results = []
 
-    # run code for each map
-    for input_file in input_files:
-        num_task_finished, execution_time = run_iteration(input_file, iterations)
-        results.append({"file": input_file, "timesteps_taken": iterations, "tasks_finished": num_task_finished,
-                        "execution_time": execution_time})
+    # run code for each map and configuration
+    for config in configs:
+        heuristic, time_horizon, replanning_period = config
+        print(heuristic, time_horizon, replanning_period)
+        # save configurations as env variables
+        set_env_var("heuristic", heuristic)
+        set_env_var("time_horizon", time_horizon)
+        set_env_var("replanning_period", replanning_period)
+        for input_file in input_files:
+            num_task_finished, execution_time = run_iteration(input_file, iterations)
+            results.append({"file": input_file,
+                            "timesteps_taken": iterations,
+                            "tasks_finished": num_task_finished,
+                            "execution_time": execution_time,
+                            "heuristic": heuristic,
+                            "time_horizon": time_horizon,
+                            "replanning_period": replanning_period
+                            })
 
     # create the directory if it doesn't exist
     os.makedirs("Output", exist_ok=True)
@@ -115,8 +140,7 @@ def run_code(input_files, output_file_folder, args):
         json.dump(results, output_file, indent=4)
 
     # plot the charts
-    if args.config is not None:
-        plot_results(output_file_folder)
+    plot_results(output_file_folder)
 
 
 def get_total_tasks_finished(file_name):
