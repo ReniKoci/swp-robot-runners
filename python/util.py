@@ -11,6 +11,7 @@ class DistanceMap:
     The distances are saved. If a distance is requested for a cell that hasn't been visited yet, the distance is
     calculated efficiently by using the previous distances.
     """
+
     def __init__(self, target: int, env: Env):
         number_of_cells = len(env.map)
         self.target: int = target
@@ -125,7 +126,7 @@ def getManhattanDistance(env, loc1: int, loc2: int) -> int:
     return abs(loc1_x - loc2_x) + abs(loc1_y - loc2_y)
 
 
-def validateMove(env, loc: int, loc2: int) -> bool:
+def is_valid_move(env, loc: int, loc2: int) -> bool:
     loc_x = loc // env.cols
     loc_y = loc % env.cols
     if loc_x >= env.rows or loc_y >= env.cols or env.map[loc] == 1:
@@ -135,6 +136,36 @@ def validateMove(env, loc: int, loc2: int) -> bool:
     if abs(loc_x - loc2_x) + abs(loc_y - loc2_y) > 1:
         return False  # would move more than 1 cell
     return True
+
+
+def get_robot_position_map(env: Env) -> list[int]:
+    """
+    Returns a map that contains a 1 if a robot is located in the cell.
+    :param env: env object
+    :return: robot location map
+    """
+    robot_map = [0] * len(env.map)
+    for state in env.curr_states:
+        robot_map[state.location] = 1
+    return robot_map
+
+
+def get_valid_forwards_neighbor_cell(env: Env, location: int, direction: int) -> Optional[int]:
+    """
+    returns the cell if it can be reached by moving forwards
+    :param env: the env obj
+    :param location: the current node index
+    :param direction: the current orientation
+    :return: node index or None if the move is invalid (wall or out of map)
+    """
+    candidates = [
+        location + 1,
+        location + env.cols,
+        location - 1,
+        location - env.cols,
+    ]
+    forward = candidates[direction]
+    return forward if is_valid_move(env, forward, location) else None
 
 
 def get_neighbors(env: Env, location: int, direction: int, reverse=False) -> list[tuple[int, int]]:
@@ -162,12 +193,12 @@ def get_neighbors(env: Env, location: int, direction: int, reverse=False) -> lis
             location + env.cols,
             location - 1,
             location - env.cols,
-            ]
+        ]
 
     forward = candidates[direction]
     new_direction = direction
-    is_valid_move = forward >= 0 and forward < len(env.map) and validateMove(env, forward, location)
-    if is_valid_move:
+    move_is_valid = forward >= 0 and forward < len(env.map) and is_valid_move(env, forward, location)
+    if move_is_valid:
         neighbors.append((forward, new_direction))
     # when we just turn left or right we don't have to validate because we do not change nodes
     # turn left

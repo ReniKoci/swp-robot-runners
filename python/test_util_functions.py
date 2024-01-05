@@ -5,7 +5,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 from python.models import Orientation, Env
-from python.test_planner import grids_to_env
+from python.test_utils import grids_to_env
 from python.util import DistanceMap, convert_2d_to_1d_coordinate
 
 

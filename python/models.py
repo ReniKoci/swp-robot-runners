@@ -36,7 +36,7 @@ class Env:
     map: list[int]  # 0 - empty; 1 - wall (agents do not affect the status)
     map_name: str
     num_of_agents: int
-    curr_timestep: int
+    curr_timestep: int  # starts with 0
     curr_states: list[State]  # position and orientation of each agent
     goal_locations: list[
         [tuple[int, int]]
