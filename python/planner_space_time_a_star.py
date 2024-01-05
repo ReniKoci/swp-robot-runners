@@ -294,10 +294,10 @@ class SpaceTimeAStarPlanner(BasePlanner):
 
             last_loc = self.env.curr_states[robot_id].location
             if path:
-                path_length_sum += len(path)
                 try:
                     self.reserve_path(last_loc, path, robot_id)
                     self.update_next_actions(path, robot_id)
+                    path_length_sum += len(path)  # todo decrease sum when a path gets cancelled
                 except RuntimeError:
                     # the path could not be reserved (e.g. because the path was shorter than the time horizon
                     # -> the robot would have to wait and the waiting cell is already reserved in some time step)
@@ -305,6 +305,13 @@ class SpaceTimeAStarPlanner(BasePlanner):
             if not path:
                 waiting_robots += 1
                 waiting_robot_ids.append(robot_id)
+                # todo - idea: collect all waiting_robot_ids (not just of the first stopped robots); re-add them to the
+                #  queue and see if they can find a path later when paths of other robots were potentially canceled
+                # todo - idea: prioritize robots closest to goal
+                # todo - idea: make robots in collision group (or all) plan routes as if all other robots would stay
+                #  on their current position (delete "waiting"-reservations of a robot once it found another path)
+                #  advantage: a robot without a path would not cancel other robots
+                #  improvement: after all robots planned, try to plan again and see if there are now better paths
                 # todo: make the path finding always return a valid path if possible
                 #  (does not have to reach the goal but should avoid collisions)
                 #  When using time_horizon this is already the case!
