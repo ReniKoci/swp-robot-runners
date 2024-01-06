@@ -255,13 +255,44 @@ class HighLevelSolver:  #CBS High Level
         # Re-plane path for the blocked agent - LOW LEVEL
         # Implement the logic to replan the path for the blocked agent, taking into account the new constraint.
         # This will involve invoking the A* algorithm or another pathfinding method that can handle constraints.
-        self.replanPathForAgent(node, agent_to_block)
+        self.replanPathForAgent(node, agent_to_block)   #TODO
 
         # Update the cost of the node. Not necessary for sub-optimal??
         node.updateCost()
 
         return node # Update the Tree Node    
     
+
+    # Solver in a sub-optimal way
+    @dispatch()
+    def solve() -> list: # TODO Info about Environment as argument?
+        node = TreeNode()
+        node.updateSolution() # TODO
+        node.updateCost()
+
+        # Resolves conflicts while there is any.
+        # TODO loop if there's no solution
+        while HighLevelSolver.hasEdgeConflictNode(node) or HighLevelSolver.hasConflictNode(node):
+            node = HighLevelSolver.resolveCoflict(node) # Update the Tree Node 
+
+        # If there are no conflicts, the solution is found
+        return node.getSolution()    
+    
+    # in first n time steps
+    @dispatch(int)
+    def solve(n) -> list: # TODO Info about Environment as argument?
+        node = TreeNode()
+        node.updateSolution() # TODO
+        node.updateCost()
+
+        # Resolves conflicts while there is any.
+        # TODO loop if there's no solution
+        while HighLevelSolver.hasEdgeConflictNode(node, n) or HighLevelSolver.hasConflictNode(node, n):
+            node = HighLevelSolver.resolveCoflict(node, n) # Update the Tree Node 
+
+        # If there are no conflicts, the solution is found
+        return node.getSolution()  
+        
 
 
 
