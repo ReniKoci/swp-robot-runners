@@ -1,4 +1,6 @@
 from multipledispatch import dispatch   #for overloading
+import random   # for random choose between two values
+
 import MAPF
 import debugpy
 from typing import Dict, List, Tuple, Set
@@ -200,8 +202,65 @@ class HighLevelSolver:  #CBS High Level
 #                     if (solutions[i][t]==solutions[j][t+1] and solutions[i][t+1]==solutions[j][t]):
 #                         return Conflict(i, j, solutions[i][t], solutions[j][t], t)
 
+    # Resolve conflict in a sub-optimal way by blocking one agent and allowing the other to proceed
+    @dispatch(TreeNode)
+    def resolveCoflict(self, node: TreeNode):
 
+        # Conflict Check
+        if (not HighLevelSolver.hasEdgeConflictNode(node) and not HighLevelSolver.hasConflictNode(node)):
+            return None
+        
+        conflict= HighLevelSolver.getConflict(node)
 
+        # Decision logic to select which agent to block. This blocked agent will be the one whose path is replanned.
+        #example decision:
+        agent_to_block = conflict.second_agent_id
+
+        # Create a constraint for the blocked agent
+        constraint = Constraint(agent_to_block, conflict.vertex_1, conflict.time)
+
+        # Add constraint to the node
+        node.addConstraint(constraint)
+
+        # Re-plane path for the blocked agent - LOW LEVEL
+        # Implement the logic to replan the path for the blocked agent, taking into account the new constraint.
+        # This will involve invoking the A* algorithm or another pathfinding method that can handle constraints.
+        self.replanPathForAgent(node, agent_to_block)
+
+        # Update the cost of the node. Not necessary for sub-optimal??
+        node.updateCost()
+
+        return node # Update the Tree Node
+
+    # in first n time steps
+    @dispatch(TreeNode, int)
+    def resolveCoflict(self, node: TreeNode, n):
+
+        # Conflict Check
+        if (not HighLevelSolver.hasEdgeConflictNode(node, n) and not HighLevelSolver.hasConflictNode(node, n)):
+            return None
+        
+        conflict= HighLevelSolver.getConflict(node, n)
+
+        # Decision logic to select which agent to block. This blocked agent will be the one whose path is replanned.
+        #example decision:
+        agent_to_block = conflict.second_agent_id
+
+        # Create a constraint for the blocked agent
+        constraint = Constraint(agent_to_block, conflict.vertex_1, conflict.time)
+
+        # Add constraint to the node
+        node.addConstraint(constraint)
+
+        # Re-plane path for the blocked agent - LOW LEVEL
+        # Implement the logic to replan the path for the blocked agent, taking into account the new constraint.
+        # This will involve invoking the A* algorithm or another pathfinding method that can handle constraints.
+        self.replanPathForAgent(node, agent_to_block)
+
+        # Update the cost of the node. Not necessary for sub-optimal??
+        node.updateCost()
+
+        return node # Update the Tree Node    
     
 
 
