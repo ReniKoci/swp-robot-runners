@@ -1,169 +1,17 @@
+import os
 import random
+import time
 import unittest
 from copy import deepcopy
-from itertools import cycle
-from typing import Union
 
 import numpy as np
-from matplotlib import pyplot as plt, patches
-from matplotlib.animation import FuncAnimation
+from matplotlib import pyplot as plt
 
 from python.planner_space_time_a_star import SpaceTimeAStarPlanner
+from python.test_utils import grids_to_env, update_env, print_grid, animate_grid, \
+    get_test_env_and_targets_from_config_file
 from python.util import get_neighbors
-from python.models import Env, State, Orientation, Action
-
-
-def grids_to_env(grid: list[list[Union[int, str]]], goal_grid: list[list[int]], map_name="map") -> Env:
-    one_d_map = [cell for row in grid for cell in row]
-    one_d_goal_grid = [cell for row in goal_grid for cell in row]
-
-    number_of_robots = len([cell for cell in one_d_map if cell != 0 and cell != 1])
-
-    robot_states = [State(location=0, orientation=0, timestep=-1) for _ in range(number_of_robots)]
-    goal_locations: list[[tuple[int, int]]] = [[(-1, -1)] for _ in range(number_of_robots)]
-    for i, cell in enumerate(one_d_map):
-        if type(cell) == str:
-            # it is a robot
-            robot_nr: int = int(cell[0]) - 1
-            last_char = cell[-1]
-            char_to_orientation_map = {
-                ">": Orientation.EAST.value,
-                "v": Orientation.SOUTH.value,
-                "<": Orientation.WEST.value,
-                "^": Orientation.NORTH.value
-            }
-            orientation = char_to_orientation_map.get(last_char)
-            robot_states[robot_nr] = State(location=i, orientation=orientation, timestep=0)
-            one_d_map[i] = 0
-
-    for i, cell_value in enumerate(one_d_goal_grid):
-        if cell_value > 0:
-            robot_nr = cell_value - 1
-            goal_locations[robot_nr] = [[i, 0]]  # position, timestep when target was revealed
-
-    env = Env(cols=len(grid[0]), rows=len(grid), map=one_d_map, map_name=map_name, num_of_agents=number_of_robots,
-              curr_timestep=0, curr_states=robot_states, goal_locations=goal_locations)
-    return env
-
-
-def update_env(env: Env, actions: list[int]) -> Env:
-    for i, state in enumerate(env.curr_states):
-        action = Action(actions[i])
-        if action == Action.W:
-            continue
-        if action == Action.CR:
-            state.orientation += 1
-            if state.orientation >= 4:
-                state.orientation = 0
-        if action == Action.CCR:
-            state.orientation -= 1
-            if state.orientation <= -1:
-                state.orientation = 3
-        if action == Action.FW:
-            candidates = [
-                state.location + 1,
-                state.location + env.cols,
-                state.location - 1,
-                state.location - env.cols,
-            ]
-            state.location = candidates[state.orientation]
-    env.curr_timestep += 1
-    return env
-
-
-def print_grid(env: Env):
-    orientation_symbols = ['→', '↓', '←', '↑']
-
-    # Create a 2D array to represent the grid
-    grid = [['   ' for _ in range(env.cols)] for _ in range(env.rows)]
-
-    # Mark obstacles
-    for i in range(env.rows * env.cols):
-        if env.map[i] == 1:
-            x, y = i % env.cols, i // env.cols
-            grid[y][x] = '███'
-
-    # Mark goal locations
-    for idx, goals in enumerate(env.goal_locations):
-        for goal_cell_index, _ in goals:
-            x, y = goal_cell_index % env.cols, goal_cell_index // env.cols
-            grid[y][x] = f'G{idx:02d}'
-
-    # Place robots with their index
-    for idx, state in enumerate(env.curr_states):
-        x, y = state.location % env.cols, state.location // env.cols
-        grid[y][x] = f'R{idx}{orientation_symbols[state.orientation]}'
-
-    # Print the grid with horizontal and vertical lines
-    horizontal_line = '+' + '-----+' * env.cols
-
-    print(horizontal_line)
-    for row in grid:
-        print('| ' + ' | '.join(row) + ' |')
-        print(horizontal_line)
-
-
-def animate_grid(envs: list, filename='lifelong_animation.gif', interval=200):
-    grid_size = (envs[0].rows, envs[0].cols)
-    orientation_symbols = ['→', '↓', '←', '↑']
-    colors = cycle(['red', 'green', 'blue', 'orange', 'purple', 'cyan', 'magenta', 'yellow'])
-
-    # Initialize a grid
-    grid = np.zeros(grid_size)
-
-    # Prepare the figure and axes
-    fig, ax = plt.subplots()
-    im = ax.imshow(grid)
-
-    # Set plot labels, title, and axis limits
-    ax.set_xlabel('X Coordinate')
-    ax.set_ylabel('Y Coordinate')
-    ax.set_title('Grid Animation with Obstacles, Goals, and Robots')
-    ax.set_xticks(np.arange(-0.5, grid_size[1], 1), minor=True)
-    ax.set_yticks(np.arange(-0.5, grid_size[0], 1), minor=True)
-    ax.grid(which='minor', color='black', linestyle='-', linewidth=2)
-    robot_colors = {}
-    for idx, _ in enumerate(envs[0].curr_states):
-        robot_colors[idx] = next(colors)
-
-    def update(frame):
-        env = envs[frame]
-        # Clear previous contents
-        for txt in ax.texts:
-            txt.remove()
-        for patch in ax.patches:
-            patch.remove()
-
-        for i in range(env.rows * env.cols):
-            x, y = i % env.cols, i // env.cols
-            if env.map[i] == 1:
-                patch = patches.Rectangle((x - 0.5, y - 0.5), 1, 1, color='white')
-            else:
-                patch = patches.Rectangle((x - 0.5, y - 0.5), 1, 1, facecolor='black', linewidth=1, edgecolor='white')
-            ax.add_patch(patch)
-
-        # Draw goal locations and robots
-        for idx, goals in enumerate(env.goal_locations):
-            color = robot_colors.get(idx, 'grey')
-            for goal_cell_index in goals:
-                gx, gy = goal_cell_index[0] % env.cols, goal_cell_index[0] // env.cols
-                ax.text(gx, gy, f'G{idx}', ha='center', va='center', color=color, fontsize=16, fontweight='bold')
-
-        for idx, state in enumerate(env.curr_states):
-            rx, ry = state.location % env.cols, state.location // env.cols
-            color = robot_colors.get(idx, 'grey')
-            ax.add_patch(plt.Circle((rx, ry), 0.3, color=color, alpha=0.5))
-            ax.text(rx, ry, f'R{idx}{orientation_symbols[state.orientation]}',
-                    ha='center', va='center', color='white')
-
-        return [im]
-
-    # Create the animation
-    anim = FuncAnimation(fig, update, frames=len(envs), interval=interval, blit=True)
-
-    # Save the animation as a GIF
-    anim.save(f"{envs[0].map_name}_{filename}", writer='pillow')
-    plt.close()
+from python.models import Env, Action, Heuristic
 
 
 class PlannerTest(unittest.TestCase):
@@ -236,13 +84,13 @@ class PlannerTest(unittest.TestCase):
         self.assertEqual(actions[0], Action.CCR.value)
 
     def test_basic_planning_huge_map(self):
-        planner = SpaceTimeAStarPlanner(visualize=True, animate=False)
+        planner = SpaceTimeAStarPlanner(visualize=True, animate=False, restarts=False)
         planner.env = env = self.get_huge_test_env()
         print_grid(env)
         actions = planner.plan(None)
         env = update_env(env, actions)
         print_grid(env)
-        self.assertEqual(actions[0], Action.FW.value)
+        self.assertIn(actions[0], [Action.FW.value, Action.CCR.value])
 
     def test_basic_planning_two_robots(self):
         grid = [
@@ -310,7 +158,7 @@ class PlannerTest(unittest.TestCase):
         planner = SpaceTimeAStarPlanner()
         planner.env = env
         actions = planner.plan(None)
-        self.assertEquals(Action(actions[1]), Action.W)
+        self.assertEqual(Action(actions[1]), Action.W)
 
     def test_multiple_steps_multiple_robots(self):
         grid = [
@@ -366,28 +214,115 @@ class PlannerTest(unittest.TestCase):
         ]
         for replanning_period, time_horizon, expected_actions in [[3, 5, (Action.FW, Action.FW)],
                                                                   [4, 4, (Action.FW, Action.FW)],
-                                                                  [4, 8, (Action.FW, Action.CCR)]]:
+                                                                  [4, 8, (Action.CR, Action.FW)]]:
             print(replanning_period, time_horizon)
             env = grids_to_env(grid, goal_grid, "hallway")
             planner = SpaceTimeAStarPlanner(replanning_period=replanning_period, time_horizon=time_horizon,
-                                            visualize=False)
+                                            visualize=False, restarts=True)
             planner.env = env
             all_envs = [deepcopy(env)]
             actions = planner.plan(None)
-            #print([Action(a) for a in actions])
+            print([Action(a) for a in actions])
             env = update_env(env, actions)
             all_envs.append(deepcopy(env))
             self.assertEqual(Action(actions[0]), expected_actions[0])
             self.assertEqual(Action(actions[1]), expected_actions[1])
             for i in range(20):
                 actions = planner.plan(None)
-                #print([Action(a) for a in actions])
+                # print([Action(a) for a in actions])
                 env = update_env(env, actions)
-                #print_grid(env)
+                # print_grid(env)
                 all_envs.append(deepcopy(env))
                 if all(a == Action.W.value for a in actions):
                     break
             animate_grid(all_envs)
+
+    def test_deadlock_avoidance_when_minor_robot_needs_2_steps_head_start(self):
+        grid = [
+            [0, 1,    1,    0, 0],
+            [0, "1>", "2<", 0, 0]
+        ]
+        goal_grid = [
+            [0, 0, 0, 0, 0],
+            [2, 0, 0, 1, 0],
+        ]
+        env = grids_to_env(grid, goal_grid, "small_hallway_with_right_padding")
+        planner = SpaceTimeAStarPlanner(replanning_period=99, time_horizon=99, restarts=False, visualize=False)
+        planner.env = env
+        all_envs = [deepcopy(env)]
+        actions = planner.plan(None)
+        self.assertEqual(Action(actions[0]), Action.W)
+        self.assertIn(Action(actions[1]), [Action.CR, Action.CCR])
+        env = update_env(env, actions)
+        all_envs.append(deepcopy(env))
+        while True:
+            actions = planner.plan(None)
+            env = update_env(env, actions)
+            all_envs.append(deepcopy(env))
+            if all(a == Action.W.value for a in actions):
+                break
+        animate_grid(all_envs)
+
+    def test_deadlock_avoidance_when_minor_robot_needs_3_steps_head_start(self):
+        grid = [
+            [0, 1,    1,    0],
+            [0, "1^", "2<", 0]
+        ]
+        goal_grid = [
+            [0, 0, 0, 0],
+            [2, 0, 0, 1],
+        ]
+        # todo for this to work we have to give the second robot more time to "run away"
+        #  (not enough steps to turn AND go up, when reaching the wall)
+        # this configuration leads to a deadlock independent of the priority:
+        # the robot with the higher prio will plan its path and will perform a forward move
+        # the second robots can't go out of the first robots way
+        # (because it would take 3 steps to turn 180 degrees and move forward)
+        env = grids_to_env(grid, goal_grid, "small_hallway")
+        planner = SpaceTimeAStarPlanner(replanning_period=99, time_horizon=99, restarts=True, visualize=False)
+        planner.env = env
+        all_envs = [deepcopy(env)]
+        actions = planner.plan(None)
+        print([Action(a) for a in actions])
+        env = update_env(env, actions)
+        all_envs.append(deepcopy(env))
+        while True:
+            actions = planner.plan(None)
+            env = update_env(env, actions)
+            all_envs.append(deepcopy(env))
+            if all(a == Action.W.value for a in actions):
+                break
+        animate_grid(all_envs)
+
+    def test_do_not_crash_into_finished_robot(self):
+        grid = [
+            ["1>", 0,    0, 0]
+        ]
+        goal_grid = [
+            [0, 1, 0, 0],
+        ]
+        # todo for this to work we have to give the second robot more time to "run away"
+        #  (not enough steps to turn AND go up, when reaching the wall)
+        # this configuration leads to a deadlock independent of the priority:
+        # the robot with the higher prio will plan its path and will perform a forward move
+        # the second robots can't go out of the first robots way
+        # (because it would take 3 steps to turn 180 degrees and move forward)
+        env = grids_to_env(grid, goal_grid, "small_hallway")
+        planner = SpaceTimeAStarPlanner(replanning_period=4, time_horizon=8, restarts=True, visualize=False)
+        planner.env = env
+        all_envs = [deepcopy(env)]
+        actions = planner.plan(None)
+        print([Action(a) for a in actions])
+        env = update_env(env, actions)
+        all_envs.append(deepcopy(env))
+        while True:
+            actions = planner.plan(None)
+            env = update_env(env, actions)
+            print_grid(env)
+            all_envs.append(deepcopy(env))
+            if all(a == Action.W.value for a in actions):
+                break
+        animate_grid(all_envs)
 
     def test_random_restarts(self):
         # @formatter:off
@@ -428,3 +363,80 @@ class PlannerTest(unittest.TestCase):
         animate_grid(all_envs)
         for robot_state, goal in zip(env.curr_states, env.goal_locations):
             self.assertEqual(robot_state.location, goal[0][0])
+
+    def test_random_20_map(self):
+        path = os.path.join(os.path.dirname(__file__), "../example_problems/random.domain/random_50.json")
+        env, tasks = get_test_env_and_targets_from_config_file(path)
+        next_task_index = env.num_of_agents
+        #print_grid(env)
+
+        planner = SpaceTimeAStarPlanner(replanning_period=4, time_horizon=8, restarts=True, heuristic=Heuristic.TRUE_DISTANCE)
+        planner.env = env
+        all_envs = [deepcopy(env)]
+        for _ in range(100):
+            actions = planner.plan(None)
+            print([Action(a).name for a in actions])
+            env, next_task_index = update_env(env, actions, tasks, next_task_index)
+            all_envs.append(deepcopy(env))
+            if all(a == Action.W.value for a in actions):
+                break
+        animate_grid(all_envs)
+
+
+    def test_compare_heuristic_performance_random_20_map(self):
+        path = os.path.join(os.path.dirname(__file__), "../example_problems/random.domain/random_20.json")
+        env, tasks = get_test_env_and_targets_from_config_file(path)
+        next_task_index = env.num_of_agents
+        processing_times = {}
+        for heuristic in [Heuristic.MANHATTAN, Heuristic.TRUE_DISTANCE]:
+            planner = SpaceTimeAStarPlanner(replanning_period=1, time_horizon=20, restarts=False,
+                                                      heuristic=heuristic)
+            local_env = deepcopy(env)
+            planner.env = local_env
+            for _ in range(100):
+                # measure time for planning
+                start = time.time()
+                actions = planner.plan(None)
+                planning_time = time.time() - start
+                processing_times.setdefault(heuristic, []).append(planning_time)
+                local_env, next_task_index = update_env(local_env, actions, tasks, next_task_index)
+
+            #for robot_state, goal in zip(local_env.curr_states, local_env.goal_locations):
+            #    self.assertEqual(robot_state.location, goal[0][0])
+            # New Plotting section for Bar Chart
+        colors = ['blue', 'orange']  # Add more colors if you have more heuristics
+        num_iterations = len(processing_times[Heuristic.MANHATTAN])  # Assuming all heuristics have the same number of iterations
+
+        # Set up the plot
+        fig, ax = plt.subplots(figsize=(20, 5))
+
+        # Width of a bar
+        width = 0.35
+
+        # Creating bars for each heuristic at each iteration
+        for i in range(num_iterations):
+            for j, heuristic in enumerate(Heuristic):
+                if heuristic in processing_times:
+                    # Calculate the position of the bar for this heuristic at this iteration
+                    x_pos = i + (j - len(Heuristic)/2) * width
+                    # Draw the bar
+                    ax.bar(x_pos, processing_times[heuristic][i], width, color=colors[j], label=heuristic.name if i == 0 else "")
+
+        # Add some text for labels, title, and custom x-axis tick labels, etc.
+        ax.set_xlabel('Iteration')
+        ax.set_ylabel('Processing Time (seconds)')
+        ax.set_title('Processing Times by Heuristic per Iteration')
+
+        # Setting the x-ticks to be in the middle of the group of bars for each iteration
+        ax.set_xticks(range(num_iterations))
+        ax.set_xticklabels(range(1, num_iterations + 1))
+
+        # Adding a legend
+        # To avoid duplicate labels in the legend, we create custom legend entries
+        from matplotlib.lines import Line2D
+        legend_elements = [Line2D([0], [0], color=colors[i], lw=4, label=heuristic.name) for i, heuristic in enumerate(Heuristic) if heuristic in processing_times]
+        ax.legend(handles=legend_elements)
+
+        plt.grid(True)
+        plt.show()
+

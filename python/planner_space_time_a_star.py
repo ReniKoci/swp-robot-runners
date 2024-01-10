@@ -1,15 +1,18 @@
 import math
 import random
 from copy import copy
-from typing import Tuple, Set
+from typing import Tuple, Set, Optional
 from queue import PriorityQueue
-from python.models import Action, BasePlanner
-from python.util import getManhattanDistance, get_neighbors
+from python.models import Action, BasePlanner, Heuristic
+from python.util import getManhattanDistance, get_neighbors, DistanceMap, get_valid_forwards_neighbor_cell, \
+    get_robot_position_map
 
 
 class SpaceTimeAStarPlanner(BasePlanner):
+    debug_mode = True
 
-    def __init__(self, pyenv=None, visualize=False, animate=False, replanning_period=2, time_horizon=10, restarts=True) -> None:
+    def __init__(self, pyenv=None, visualize=False, animate=False, replanning_period=2, time_horizon=10, restarts=True,
+                 heuristic: Heuristic = Heuristic.TRUE_DISTANCE) -> None:
         super().__init__(pyenv, "Space-Time-A-Star-Planner")
         self.reservation: Set[Tuple[int, int, int]] = set()
         # (cell id 1, cell id 2, timestep relative to current timestep [one_based])
@@ -22,6 +25,11 @@ class SpaceTimeAStarPlanner(BasePlanner):
         self.replanning_period = replanning_period
         self.time_horizon = time_horizon
         self.random_restarts = restarts
+
+        self.heuristic = heuristic  # todo: make configurable via os env
+        self.try_fix_waiting_robots = True
+
+        self.distance_maps = {}  # in here we store the distance map for each target cell while ignoring robots
 
         self.VISUALIZE = visualize
         if visualize:
@@ -43,7 +51,8 @@ class SpaceTimeAStarPlanner(BasePlanner):
     def plan_with_random_restarts(self, time_limit) -> list[int]:
         num_of_robots = self.env.num_of_agents
         priority_order = tuple(range(num_of_robots))
-        first_solution, path_length_sum, waiting_robots = self.sample_priority_planner(time_limit, priority_order)
+        first_solution, path_length_sum, waiting_robots, waiting_robot_ids = self.sample_priority_planner(time_limit,
+                                                                                                          priority_order)
         if not self.random_restarts:
             return first_solution
 
@@ -57,15 +66,25 @@ class SpaceTimeAStarPlanner(BasePlanner):
         number_of_restarts = 10
         number_of_restarts = min(number_of_restarts, math.factorial(num_of_robots) - 1)
         for i in range(number_of_restarts):
-            while True:
-                new_priority_order = list(priority_order)
-                random.shuffle(new_priority_order)
-                new_priority_order = tuple(new_priority_order)
-                if new_priority_order not in tried_priority_orders:
-                    tried_priority_orders.add(new_priority_order)
-                    break
-            _, new_path_length_sum, new_waiting_robots = self.sample_priority_planner(time_limit, new_priority_order)
-            if new_waiting_robots < min_waiting_robots or (new_waiting_robots == min_waiting_robots and new_path_length_sum < min_path_length_sum):
+            try_to_fix_waiting_robots = self.try_fix_waiting_robots and waiting_robots > 0
+            if try_to_fix_waiting_robots:
+                _, new_path_length_sum, new_waiting_robots, waiting_robot_ids = self.sample_priority_planner(time_limit,
+                                                                                                             priority_order,
+                                                                                                             try_fix_stuck_robots=waiting_robot_ids)
+                waiting_robot_ids = []  # makes sure fix is only tried once per priority order
+            else:
+                while True:
+                    new_priority_order = list(priority_order)
+                    random.shuffle(new_priority_order)
+                    new_priority_order = tuple(new_priority_order)
+                    if new_priority_order not in tried_priority_orders:
+                        priority_order = new_priority_order
+                        tried_priority_orders.add(priority_order)
+                        break
+                _, new_path_length_sum, new_waiting_robots, waiting_robot_ids = self.sample_priority_planner(time_limit,
+                                                                                                             priority_order)
+            if new_waiting_robots < min_waiting_robots or (
+                    new_waiting_robots == min_waiting_robots and new_path_length_sum < min_path_length_sum):
                 min_waiting_robots = new_waiting_robots
                 min_path_length_sum = new_path_length_sum
                 best_next_actions = copy(self.next_actions)
@@ -75,16 +94,48 @@ class SpaceTimeAStarPlanner(BasePlanner):
         #  lowest sum of path lengths, lowest number of waiting robots, lowest sum of h values
         #  (caution: when an agent reaches its goal, he will get a new target with a new bigger h)
 
+    def get_heuristic_value(self, start: int, orientation: int, end: int) -> int:
+        """
+        get the heuristic value for the given start and end cell
+        :param orientation: orientation of the robot
+        :param start: start cell index
+        :param end: end cell index
+        :return: the heuristic value
+        """
+        if self.heuristic == Heuristic.TRUE_DISTANCE:
+            return self.get_true_distance(start, orientation, end)
+        elif self.heuristic == Heuristic.MANHATTAN:
+            return getManhattanDistance(self.env, start, end)
+        else:
+            raise RuntimeError(f"unknown heuristic {self.heuristic}")
 
+    def get_true_distance(self, start: int, start_orientation: int, end: int) -> int:
+        """
+        get the true distance between two cells
+        :param start_orientation: orientation of the robot
+        :param start: start cell index
+        :param end: end cell index
+        :return: the true distance
+        """
+        if start == end:
+            return 0
+        if end in self.distance_maps:
+            distance_map = self.distance_maps[end]
+        else:
+            distance_map = DistanceMap(end, self.env)
+            self.distance_maps[end] = distance_map
+        return distance_map.get_distance(self.env, start, start_orientation)
 
     def space_time_plan(
             self,
             start: int,
             start_direct: int,
             end: int,
+            robot_id: int
     ) -> list[tuple[int, int]]:
         """
         finds the shortest path
+        :param robot_id: id of the robot
         :param start: the start cell index
         :param start_direct: the orientation of the robot
         :param end: the target cell index
@@ -98,7 +149,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
         if self.VISUALIZE:
             self.visualizer.reset()
 
-        h = getManhattanDistance(self.env, start, end)  # heuristic approximation
+        h = self.get_heuristic_value(start, start_direct, end)  # heuristic approximation
         g = 0  # distance traveled
         node_info = (start, start_direct, g, h)
         open_list.put((g + h, h, id(node_info), node_info))
@@ -124,6 +175,10 @@ class SpaceTimeAStarPlanner(BasePlanner):
             all_nodes[(position * 4 + orientation, g)] = current_node_info
             if position == end:
                 while True:  # yey, we found a path
+                    # todo: instead of returning the path here, we should first check if the path is at least as long as
+                    #  the time horizon, otherwise the robot would stop and block the cell it is on until the
+                    #  next planning step
+                    #  (or worse: the waiting cell is already reserved -> the found route would get canceled))
                     path.append((current_node_info[0], current_node_info[1]))  # append position, orientation to path
                     current_node_info = parent[(current_node_info[0] * 4 + current_node_info[1], current_node_info[
                         2])]  # previous node is the parent -> get parent by position hash, g (dist from start)
@@ -139,7 +194,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
                 # it's not really the neighbor we are checking, it is more the next possible position+orientation
                 neighbor_location, neighbor_direction = neighbor
 
-                if self.is_reserved(position, neighbor_location, next_time_step):
+                if self.is_reserved(position, neighbor_location, next_time_step, current_robot_id=robot_id):
                     continue
 
                 neighbor_key = (neighbor_location * 4 + neighbor_direction, next_time_step)
@@ -150,7 +205,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
                         old = (old[0], old[1], g + 1, old[3], old[4])
                 else:
                     next_g = g + 1
-                    next_h = getManhattanDistance(self.env, neighbor_location, end)
+                    next_h = self.get_heuristic_value(neighbor_location, neighbor_direction, end)
                     next_node_info = (
                         neighbor_location,
                         neighbor_direction,
@@ -172,7 +227,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
             self.visualizer.save_visualizations(self.env, start, end)
         return path
 
-    def is_reserved(self, start: int, end: int, time_step: int):
+    def is_reserved(self, start: int, end: int, time_step: int, current_robot_id=None) -> bool:
         """
         check if the target cell is already reserved + check if the edge is reserved
         :return: true if move is already reserved
@@ -180,129 +235,213 @@ class SpaceTimeAStarPlanner(BasePlanner):
         if end == -1:
             end = start
         if (end, -1, time_step) in self.reservation:
-            return True  # the end cell is already reserved
+            if current_robot_id is None:
+                return True  # the end cell is already reserved
+            # only return True if the robot that reserved the cell is not the current robot
+            if self.edge_hash_to_robot_id[(end, -1, time_step)] != current_robot_id:
+                return True
 
         if (end, start, time_step) in self.reservation:
             return True  # the edge end --to--> start is already reserved in the next timestep
         return False
 
-    def sample_priority_planner(self, time_limit: int, robot_order=None) -> tuple[list[int], int, int]:
+    def sample_priority_planner(self, time_limit: int, robot_order=None,
+                                try_fix_stuck_robots: Optional[list[int]] = None) -> tuple[
+        list[int], int, int, list[int]]:
         """
         get actions for all robots
+        :param try_fix_stuck_robots:
         :param time_limit:
         :param robot_order: order in which the robots should be planned (priority)
-        :return: actions, path_length_sum, number of waiting_robots
+        :return: actions, path_length_sum, number of waiting_robots,
+        collision_groups (list of lists of robot ids that are in a collision group)
         """
         # todo: stop when time_limit is reached?
-        # todo: do replan (or only plan for specific agents) when some agent reached his goal
+        # todo: replan (or only plan for specific agents) when some agent reached his goal
         self.reservation = set()
         self.edge_hash_to_robot_id = {}
 
+        # todo implement try_fix_collisions: make the first collider in the group wait one step and make the robot wait the first step he would normally move forward
+        #  and then make his moves planned in the previous iteration,
+        #  check if this is possible and if the other robot can now move
+
         path_length_sum = 0
         waiting_robots = 0
+        waiting_robot_ids = []
+        collision_groups: list[list[int]] = []  # list of lists of robot ids that are in a collision group
 
-        self.next_actions = [[Action.W.value]*len(self.env.curr_states) for _ in range(self.replanning_period)]
+        self.next_actions = [[Action.W.value] * len(self.env.curr_states) for _ in range(self.replanning_period)]
 
-        # reserve waiting cell for all robots that don't have any goals left
-        robot_order = robot_order or range(self.env.num_of_agents)
-        for robot_id in robot_order:
-            path = []
-            if not self.env.goal_locations[robot_id]:
-                path.append(
-                    (
-                        self.env.curr_states[robot_id].location,
-                        self.env.curr_states[robot_id].orientation,
-                    )
-                )
-                self.add_reservation(self.env.curr_states[robot_id].location, -1, 1, robot_id)
-            # todo: reserve cell for every step
+        self.prereserve_cells_based_on_robot_positions(try_fix_stuck_robots)
+
         # plan and reserve path for one robot at a time
-        for robot_id in robot_order:
-            path = []
-            if self.env.goal_locations[robot_id]:
-                path = self.space_time_plan(  # get the shortest possible path
-                    self.env.curr_states[robot_id].location,
-                    self.env.curr_states[robot_id].orientation,
-                    self.env.goal_locations[robot_id][0][0]
-                )
+        for robot_id in robot_order or range(self.env.num_of_agents):
+            # reserve waiting cell for all robots that don't have any goals left
+            # todo: instead of waiting,
+            #  try to find a path that avoids collisions by setting the robots priority to the lowest
+            #  and / or perform depth first search to find a path that avoids collisions
+            if not self.env.goal_locations[robot_id]:
+                for step in range(self.time_horizon):
+                    self.add_reservation(self.env.curr_states[robot_id].location, -1, step, robot_id)
+                continue
+
+            path = self.space_time_plan(  # get the shortest possible path
+                self.env.curr_states[robot_id].location,
+                self.env.curr_states[robot_id].orientation,
+                self.env.goal_locations[robot_id][0][0],
+                robot_id
+            )
 
             last_loc = self.env.curr_states[robot_id].location
             if path:
-                path_length_sum += len(path)
-                # convert the path to actions
-                prev_loc = self.env.curr_states[robot_id].location
-                prev_ori = self.env.curr_states[robot_id].orientation
-                for i in range(min(len(path), self.replanning_period)):
-                    new_location = path[i][0]
-                    new_orientation = path[i][1]
-                    if new_location != prev_loc:
-                        self.next_actions[i][robot_id] = Action.FW.value
-                    elif new_orientation != prev_ori:
-                        incr = new_orientation - prev_ori
-                        if incr == 1 or incr == -3:
-                            self.next_actions[i][robot_id] = Action.CR.value
-                        elif incr == -1 or incr == 3:
-                            self.next_actions[i][robot_id] = Action.CCR.value
-                    prev_loc = new_location
-                    prev_ori = new_orientation
-                # reserve the path
-                time_step = 1
-                for step in range(self.time_horizon):
-                    if step < len(path):
-                        p = path[step]
-                    else:
-                        p = path[-1]  # take the last position if path ends before time horizon
-
-                    self.add_reservation(last_loc, p[0], time_step, robot_id)
-                    last_loc = p[0]
-                    time_step += 1
+                try:
+                    self.reserve_path(last_loc, path, robot_id)
+                    self.update_next_actions(path, robot_id)
+                    path_length_sum += len(path)  # todo decrease sum when a path gets cancelled
+                except RuntimeError:
+                    # the path could not be reserved (e.g. because the path was shorter than the time horizon
+                    # -> the robot would have to wait and the waiting cell is already reserved in some time step)
+                    path = None
             if not path:
                 waiting_robots += 1
+                waiting_robot_ids.append(robot_id)
+                # todo - idea: collect all waiting_robot_ids (not just of the first stopped robots); re-add them to the
+                #  queue and see if they can find a path later when paths of other robots were potentially canceled
+                # todo - idea: prioritize robots closest to goal
+                # todo - idea: make robots in collision group (or all) plan routes as if all other robots would stay
+                #  on their current position (delete "waiting"-reservations of a robot once it found another path)
+                #  advantage: a robot without a path would not cancel other robots
+                #  improvement: after all robots planned, try to plan again and see if there are now better paths
                 # todo: make the path finding always return a valid path if possible
                 #  (does not have to reach the goal but should avoid collisions)
+                #  When using time_horizon this is already the case!
                 # there is no path for robot i -> he will wait -> reserve his waiting position BUT:
                 # it is possible that the waiting cell is already reserved -> the robot that reserved the cell has to be stopped
                 # to prevent a crash
-                for step in range(self.replanning_period):
+                for step in range(self.time_horizon):
                     waiting_position = (last_loc, -1, step + 1)
-                    if self.is_reserved(*waiting_position):
+                    if self.is_reserved(*waiting_position, current_robot_id=robot_id):
                         # check who reserved it and cancel his actions
-                        self.handle_conflict(*waiting_position)
+                        collision_group, stopped_robots_count = self.handle_conflict(*waiting_position)
+                        waiting_robots += stopped_robots_count
+                        collision_groups.append(collision_group)
                     else:
                         self.add_reservation(*waiting_position, robot_id)
 
-        return self.next_actions[0], path_length_sum, waiting_robots
+        return self.next_actions[0], path_length_sum, waiting_robots, waiting_robot_ids
 
-    def add_reservation(self, start: int, end: int, time_step: int, robot_index: int):
+    def prereserve_cells_based_on_robot_positions(self, try_fix_stuck_robots):
+        """
+        before planning, reserve the cells where the robots cannot leave immediately (e.g. if the robots face a wall)
+        :param try_fix_stuck_robots: robots in this list get even more reservations which can help to better
+        "run away" from higher priority robots
+        """
+        robot_position_map = get_robot_position_map(self.env)
+        for robot_id in range(self.env.num_of_agents):
+            # check if the robot is able to change its position in the next time step
+            #  if not -> already reserve the cell the robot is currently in to prevent deadlocks
+            position, orientation = self.env.curr_states[robot_id].location, self.env.curr_states[robot_id].orientation
+            cell_in_front_of_robot = get_valid_forwards_neighbor_cell(self.env, position, orientation)
+            obstacle_in_front_of_robot = cell_in_front_of_robot is None
+            if obstacle_in_front_of_robot:
+                # there is an obstacle in front of the robot -> reserve the cell the robot is currently in
+                self.add_reservation(position, -1, time_step=1, robot_index=robot_id)
+                if try_fix_stuck_robots and robot_id in try_fix_stuck_robots:
+                    self.add_reservation(position, -1, time_step=2, robot_index=robot_id)
+            elif robot_position_map[cell_in_front_of_robot] == 1:
+                # there is another robot in front of the robot -> reserve the cell the robot is currently in
+                self.add_reservation(position, -1, time_step=1, robot_index=robot_id)
+                # todo reserve another step if the other robot is heading in the direction of the robot
+                self.add_reservation(position, -1, time_step=2, robot_index=robot_id)
+                # todo only make two reservations if the left and right neighbor cells of the robot
+                #  are also obstacles or other robots (does not have to be better in every case)
+                if try_fix_stuck_robots and robot_id in try_fix_stuck_robots:
+                    self.add_reservation(position, -1, time_step=3, robot_index=robot_id)
+
+    def update_next_actions(self, path, robot_id):
+        # convert the path to actions
+        prev_loc = self.env.curr_states[robot_id].location
+        prev_ori = self.env.curr_states[robot_id].orientation
+        for i in range(min(len(path), self.replanning_period)):
+            new_location = path[i][0]
+            new_orientation = path[i][1]
+            if new_location != prev_loc:
+                self.next_actions[i][robot_id] = Action.FW.value
+            elif new_orientation != prev_ori:
+                incr = new_orientation - prev_ori
+                if incr == 1 or incr == -3:
+                    self.next_actions[i][robot_id] = Action.CR.value
+                elif incr == -1 or incr == 3:
+                    self.next_actions[i][robot_id] = Action.CCR.value
+            prev_loc = new_location
+            prev_ori = new_orientation
+
+    def reserve_path(self, last_loc, path, robot_id):
+        time_step = 1
+        for step in range(self.time_horizon):
+            if step < len(path):
+                p = path[step]
+            else:
+                p = path[-1]  # take the last position if path ends before time horizon
+            self.add_reservation(last_loc, p[0], time_step, robot_id, fail_if_already_reserved=True)
+
+            last_loc = p[0]
+            time_step += 1
+        return last_loc
+
+    def add_reservation(self, start: int, end: int, time_step: int, robot_index: int, fail_if_already_reserved=False):
         """
         add a path to the reservation table
         :param start: start cell index
         :param end: end cell index: -1 if same as start
         :param time_step: reservation timestep
         :param robot_index: id of the reserving robot
+        :param fail_if_already_reserved: raises an error if the cell is already reserved by another robot
         """
         if end == -1:
             end = start
         cell_hash = (end, -1, time_step)
+        if (self.debug_mode or fail_if_already_reserved) and cell_hash in self.reservation and \
+                self.edge_hash_to_robot_id[cell_hash] != robot_index:
+            raise RuntimeError(f"robot {robot_index} tried to reserve cell {cell_hash}, but it is already reserved "
+                               f"by robot {self.edge_hash_to_robot_id[cell_hash]}")
         self.reservation.add(cell_hash)  # reserve the end cell itself
         self.edge_hash_to_robot_id[cell_hash] = robot_index  # to make it easy to lookup which robot reserved which cell
         if start != end:
             edge_hash = (start, end, time_step)
             self.reservation.add(edge_hash)  # reserve the edge
-            self.edge_hash_to_robot_id[edge_hash] = robot_index  # to make it easy to lookup which robot reserved which edge
+            self.edge_hash_to_robot_id[
+                edge_hash] = robot_index  # to make it easy to lookup which robot reserved which edge
 
-    def handle_conflict(self, start: int, end: int, time_step: int):
+    def handle_conflict(self, start: int, end: int, time_step: int, level=0) -> tuple[list[int], int]:
+        """
+        check who reserved the cell and cancel his actions and reservations - make him wait
+        if the stopped robot would collide with another robot -> stop the other robot also recursively
+        :param start: start cell
+        :param end: end cell
+        :param time_step: time step
+        :return: list of ids of robots that were stopped
+        """
         # todo: check if there is an easy & quick reroute of the colliding robot possible
         colliding_robot_id = self.edge_hash_to_robot_id[(start, end, time_step)]
+        collision_group_ids = [colliding_robot_id]
         self.revoke_all_reservations_of_robot(colliding_robot_id)
+        stopped_robot_count = 1
         for step in range(self.replanning_period):
             self.next_actions[step][colliding_robot_id] = Action.W.value  # make colliding robot wait
+        for step in range(self.time_horizon):
             # if the colliding robot which will now wait would collide with another robot -> stop the other robot also
             stopped_robot_location = self.env.curr_states[colliding_robot_id].location
             wait_cell_hash_of_stopped_robot = (stopped_robot_location, -1, step + 1)
-            if self.is_reserved(*wait_cell_hash_of_stopped_robot):
-                self.handle_conflict(*wait_cell_hash_of_stopped_robot)
+            if self.is_reserved(*wait_cell_hash_of_stopped_robot, current_robot_id=colliding_robot_id):
+                if self.debug_mode and level >= 50:
+                    print("recursion limit reached")
+                new_collision_group_ids, new_stopped_robot_count = self.handle_conflict(
+                    *wait_cell_hash_of_stopped_robot, level=level + 1)
+                stopped_robot_count += new_stopped_robot_count
+                collision_group_ids.extend(new_collision_group_ids)
             self.add_reservation(*wait_cell_hash_of_stopped_robot, colliding_robot_id)
+        return collision_group_ids, stopped_robot_count
 
     def revoke_all_reservations_of_robot(self, robot_id: int):
         """
