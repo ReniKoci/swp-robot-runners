@@ -173,7 +173,6 @@ def compare_and_update_best_benchmark(file_name, iterations=None):
         shutil.copy(file_name, "best_benchmark.json")
         print("Better benchmark found!")
 
-
 def get_timesteps():
     parser = argparse.ArgumentParser()
     parser.add_argument("--simulationTime", type=int)
@@ -213,6 +212,7 @@ if __name__ == "__main__":
     argParser.add_argument("--rebuild", action="store_true", help="Use when you want to rebuild the program")
     argParser.add_argument("--iterations", type=int, nargs="?", default=None, help="Specify the number of iterations("
                                                                                    "steps")
+
     argParser.add_argument("--config", type=json.loads, default=None,
                            help='Configuration for algorithm, heuristic, timeHorizon, '
                                 'replanningPeriod etc.')
