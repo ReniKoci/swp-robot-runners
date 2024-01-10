@@ -7,8 +7,8 @@ import numpy as np
 from matplotlib import pyplot as plt, patches
 from matplotlib.animation import FuncAnimation
 
-from python.models import Env, State, Orientation, Action
-from python.util import convert_1d_to_2d_coordinate
+from models import Env, State, Orientation, Action
+from util import convert_1d_to_2d_coordinate
 
 
 def grids_to_env(grid: list[list[Union[int, str]]], goal_grid: list[list[int]], map_name="map") -> Env:
