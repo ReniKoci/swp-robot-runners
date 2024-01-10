@@ -385,40 +385,58 @@ class PlannerTest(unittest.TestCase):
 
     def test_compare_heuristic_performance_random_20_map(self):
         path = os.path.join(os.path.dirname(__file__), "../example_problems/random.domain/random_20.json")
-        env, _ = get_test_env_and_targets_from_config_file(path)
+        env, tasks = get_test_env_and_targets_from_config_file(path)
+        next_task_index = env.num_of_agents
         processing_times = {}
         for heuristic in [Heuristic.MANHATTAN, Heuristic.TRUE_DISTANCE]:
-            planner = SpaceTimeAStarPlanner(replanning_period=4, time_horizon=6, restarts=True,
+            planner = SpaceTimeAStarPlanner(replanning_period=1, time_horizon=20, restarts=False,
                                                       heuristic=heuristic)
             local_env = deepcopy(env)
             planner.env = local_env
-            while True:
+            for _ in range(100):
                 # measure time for planning
                 start = time.time()
                 actions = planner.plan(None)
                 planning_time = time.time() - start
                 processing_times.setdefault(heuristic, []).append(planning_time)
-                local_env = update_env(local_env, actions)
-                if all(a == Action.W.value for a in actions):
-                    break
+                local_env, next_task_index = update_env(local_env, actions, tasks, next_task_index)
 
-            for robot_state, goal in zip(local_env.curr_states, local_env.goal_locations):
-                self.assertEqual(robot_state.location, goal[0][0])
-        print("processing times:", processing_times)
-        # Plotting
+            #for robot_state, goal in zip(local_env.curr_states, local_env.goal_locations):
+            #    self.assertEqual(robot_state.location, goal[0][0])
+            # New Plotting section for Bar Chart
+        colors = ['blue', 'orange']  # Add more colors if you have more heuristics
+        num_iterations = len(processing_times[Heuristic.MANHATTAN])  # Assuming all heuristics have the same number of iterations
 
-        labels = [heuristic.name for heuristic in Heuristic]
-        times = [processing_times[heuristic] for heuristic in Heuristic]
+        # Set up the plot
+        fig, ax = plt.subplots(figsize=(20, 5))
 
-        # Plotting
-        for heuristic in Heuristic:
-            times = processing_times[heuristic]
-            plt.plot(times, label=heuristic.name)
+        # Width of a bar
+        width = 0.35
 
-        plt.xlabel('Iteration')
-        plt.ylabel('Processing Time (seconds)')
-        plt.title('Processing Times by Heuristic')
-        plt.legend()
+        # Creating bars for each heuristic at each iteration
+        for i in range(num_iterations):
+            for j, heuristic in enumerate(Heuristic):
+                if heuristic in processing_times:
+                    # Calculate the position of the bar for this heuristic at this iteration
+                    x_pos = i + (j - len(Heuristic)/2) * width
+                    # Draw the bar
+                    ax.bar(x_pos, processing_times[heuristic][i], width, color=colors[j], label=heuristic.name if i == 0 else "")
+
+        # Add some text for labels, title, and custom x-axis tick labels, etc.
+        ax.set_xlabel('Iteration')
+        ax.set_ylabel('Processing Time (seconds)')
+        ax.set_title('Processing Times by Heuristic per Iteration')
+
+        # Setting the x-ticks to be in the middle of the group of bars for each iteration
+        ax.set_xticks(range(num_iterations))
+        ax.set_xticklabels(range(1, num_iterations + 1))
+
+        # Adding a legend
+        # To avoid duplicate labels in the legend, we create custom legend entries
+        from matplotlib.lines import Line2D
+        legend_elements = [Line2D([0], [0], color=colors[i], lw=4, label=heuristic.name) for i, heuristic in enumerate(Heuristic) if heuristic in processing_times]
+        ax.legend(handles=legend_elements)
+
         plt.grid(True)
         plt.show()
 
