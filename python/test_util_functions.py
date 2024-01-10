@@ -89,3 +89,16 @@ class UtilTest(unittest.TestCase):
             15)
         plot_distance_map(distance_map.distance_map, env)
 
+    def test_generate_visualization_for_benchmark_tool(self):
+        # <config name>, <tasks completed at timestep x>
+        data = {
+            "config0": [0, 0, 0, 0, 1, 1, 1, 2, 3, 3, 3, 3, 4, 5, 7, 8, 8, 8, 9],
+            "config1": [0, 0, 0, 0, 0, 1, 1, 1, 2, 2, 4, 4, 4, 4, 4, 5, 7, 7, 7],
+            "config2": [1, 1, 1, 2, 2, 4, 4, 4, 4, 4, 5, 7, 8, 9, 9, 9, 9, 10, 13],
+        }
+        # use matplotlib to generate a line chart
+        # x - axis: timestep
+        # y - axis: tasks completed
+        # each line represents a config
+        # save the chart as a file
+

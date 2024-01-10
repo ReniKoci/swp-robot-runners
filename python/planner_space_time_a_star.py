@@ -1,4 +1,5 @@
 import math
+import os
 import random
 from copy import copy
 from typing import Tuple, Set, Optional
@@ -11,8 +12,8 @@ from python.util import getManhattanDistance, get_neighbors, DistanceMap, get_va
 class SpaceTimeAStarPlanner(BasePlanner):
     debug_mode = True
 
-    def __init__(self, pyenv=None, visualize=False, animate=False, replanning_period=2, time_horizon=10, restarts=True,
-                 heuristic: Heuristic = Heuristic.TRUE_DISTANCE) -> None:
+    def __init__(self, pyenv=None, visualize=False, animate=False, replanning_period=8, time_horizon=10, restarts=False,
+                 heuristic: Heuristic = None) -> None:
         super().__init__(pyenv, "Space-Time-A-Star-Planner")
         self.reservation: Set[Tuple[int, int, int]] = set()
         # (cell id 1, cell id 2, timestep relative to current timestep [one_based])
@@ -26,7 +27,9 @@ class SpaceTimeAStarPlanner(BasePlanner):
         self.time_horizon = time_horizon
         self.random_restarts = restarts
 
-        self.heuristic = heuristic  # todo: make configurable via os env
+        if heuristic is None:
+            self.heuristic = Heuristic[os.getenv("heuristic", Heuristic.TRUE_DISTANCE.value)]
+
         self.try_fix_waiting_robots = True
 
         self.distance_maps = {}  # in here we store the distance map for each target cell while ignoring robots
