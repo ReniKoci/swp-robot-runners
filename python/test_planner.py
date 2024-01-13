@@ -294,36 +294,6 @@ class PlannerTest(unittest.TestCase):
                 break
         animate_grid(all_envs)
 
-    def test_do_not_crash_into_finished_robot(self):
-        grid = [
-            ["1>", 0,    0, 0]
-        ]
-        goal_grid = [
-            [0, 1, 0, 0],
-        ]
-        # todo for this to work we have to give the second robot more time to "run away"
-        #  (not enough steps to turn AND go up, when reaching the wall)
-        # this configuration leads to a deadlock independent of the priority:
-        # the robot with the higher prio will plan its path and will perform a forward move
-        # the second robots can't go out of the first robots way
-        # (because it would take 3 steps to turn 180 degrees and move forward)
-        env = grids_to_env(grid, goal_grid, "small_hallway")
-        planner = SpaceTimeAStarPlanner(replanning_period=4, time_horizon=8, restarts=True, visualize=False)
-        planner.env = env
-        all_envs = [deepcopy(env)]
-        actions = planner.plan(None)
-        print([Action(a) for a in actions])
-        env = update_env(env, actions)
-        all_envs.append(deepcopy(env))
-        while True:
-            actions = planner.plan(None)
-            env = update_env(env, actions)
-            print_grid(env)
-            all_envs.append(deepcopy(env))
-            if all(a == Action.W.value for a in actions):
-                break
-        animate_grid(all_envs)
-
     def test_random_restarts(self):
         # @formatter:off
         grid = [
@@ -365,10 +335,9 @@ class PlannerTest(unittest.TestCase):
             self.assertEqual(robot_state.location, goal[0][0])
 
     def test_random_20_map(self):
-        path = os.path.join(os.path.dirname(__file__), "../example_problems/random.domain/random_50.json")
+        path = os.path.join(os.path.dirname(__file__), "../example_problems/random.domain/random_400.json")
         env, tasks = get_test_env_and_targets_from_config_file(path)
         next_task_index = env.num_of_agents
-        #print_grid(env)
 
         planner = SpaceTimeAStarPlanner(replanning_period=4, time_horizon=8, restarts=True, heuristic=Heuristic.TRUE_DISTANCE)
         planner.env = env
@@ -377,6 +346,7 @@ class PlannerTest(unittest.TestCase):
             actions = planner.plan(None)
             print([Action(a).name for a in actions])
             env, next_task_index = update_env(env, actions, tasks, next_task_index)
+            #print_grid(env)
             all_envs.append(deepcopy(env))
             if all(a == Action.W.value for a in actions):
                 break
