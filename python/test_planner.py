@@ -10,8 +10,8 @@ from matplotlib import pyplot as plt
 from python.planner_space_time_a_star import SpaceTimeAStarPlanner
 from python.test_utils import grids_to_env, update_env, print_grid, animate_grid, \
     get_test_env_and_targets_from_config_file
-from python.util import get_neighbors
-from python.models import Env, Action, Heuristic
+from python.util import get_neighbors, convert_1d_to_2d_coordinate
+from python.models import Env, Action, Heuristic, AstarHighLevelPlannerType
 
 
 class PlannerTest(unittest.TestCase):
@@ -239,7 +239,7 @@ class PlannerTest(unittest.TestCase):
 
     def test_deadlock_avoidance_when_minor_robot_needs_2_steps_head_start(self):
         grid = [
-            [0, 1,    1,    0, 0],
+            [0, 1, 1, 0, 0],
             [0, "1>", "2<", 0, 0]
         ]
         goal_grid = [
@@ -265,7 +265,7 @@ class PlannerTest(unittest.TestCase):
 
     def test_deadlock_avoidance_when_minor_robot_needs_3_steps_head_start(self):
         grid = [
-            [0, 1,    1,    0],
+            [0, 1, 1, 0],
             [0, "1^", "2<", 0]
         ]
         goal_grid = [
@@ -339,8 +339,11 @@ class PlannerTest(unittest.TestCase):
         env, tasks = get_test_env_and_targets_from_config_file(path)
         next_task_index = env.num_of_agents
 
-        planner = SpaceTimeAStarPlanner(replanning_period=4, time_horizon=8, restarts=True, heuristic=Heuristic.TRUE_DISTANCE)
+        planner = SpaceTimeAStarPlanner(replanning_period=4, time_horizon=8, restarts=False,
+                                        heuristic=Heuristic.TRUE_DISTANCE,
+                                        high_level_planner=AstarHighLevelPlannerType.PRIORITY_DETOUR)
         planner.env = env
+        print_grid(env)
         all_envs = [deepcopy(env)]
         for _ in range(100):
             actions = planner.plan(None)
