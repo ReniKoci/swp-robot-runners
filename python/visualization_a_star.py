@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Polygon
 from matplotlib.animation import FuncAnimation
 
-from python.models import Env
+from models import Env
 
 
 class AStarVisualizer:

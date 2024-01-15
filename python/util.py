@@ -1,7 +1,7 @@
 from typing import Optional
 from queue import PriorityQueue
 
-from python.models import Env, Action
+from models import Env, Action
 
 
 class DistanceMap:

@@ -4,14 +4,13 @@ import time
 import unittest
 from copy import deepcopy
 
-import numpy as np
 from matplotlib import pyplot as plt
 
-from python.planner_space_time_a_star import SpaceTimeAStarPlanner
-from python.test_utils import grids_to_env, update_env, print_grid, animate_grid, \
+from planner_space_time_a_star import SpaceTimeAStarPlanner
+from test_utils import grids_to_env, update_env, print_grid, animate_grid, \
     get_test_env_and_targets_from_config_file
-from python.util import get_neighbors, convert_1d_to_2d_coordinate
-from python.models import Env, Action, Heuristic, AstarHighLevelPlannerType
+from util import get_neighbors
+from models import Env, Action, Heuristic, AstarHighLevelPlannerType
 
 
 class PlannerTest(unittest.TestCase):
