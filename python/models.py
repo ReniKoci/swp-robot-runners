@@ -8,6 +8,16 @@ class Heuristic(Enum):
     TRUE_DISTANCE = 1
 
 
+class DetourPlannerPhase(Enum):
+    FIND_PATH = 0
+    IMPROVE = 1
+
+
+class AstarHighLevelPlannerType(Enum):
+    PRIORITY = 0
+    PRIORITY_DETOUR = 1
+
+
 class Action(Enum):
     FW = 0
     CR = 1

@@ -45,6 +45,11 @@ def grids_to_env(grid: list[list[Union[int, str]]], goal_grid: list[list[int]], 
 
 
 def update_env(env: Env, actions: list[int], tasks: list[int] = None, next_task_index: int = None) -> Union[Env, tuple[Env, int]]:
+    robot_map = [None for _ in range(env.cols * env.rows)]
+    for i, state in enumerate(env.curr_states):
+        if robot_map[state.location] is not None:
+            raise ValueError(f"Robot {i} collided with robot {robot_map[state.location]} in previous step")
+        robot_map[state.location] = i
     for i, state in enumerate(env.curr_states):
         action = Action(actions[i])
         if action == Action.W:
@@ -72,6 +77,12 @@ def update_env(env: Env, actions: list[int], tasks: list[int] = None, next_task_
             if next_task_index >= len(tasks):
                 next_task_index = 0
     env.curr_timestep += 1
+    robot_map = [None for _ in range(env.cols * env.rows)]
+    for i, state in enumerate(env.curr_states):
+        if robot_map[state.location] is not None:
+            raise ValueError(f"Robot {i} collided with robot {robot_map[state.location]} in location {state.location}")
+        robot_map[state.location] = i
+
     if tasks is not None:
         return env, next_task_index
     return env

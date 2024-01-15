@@ -2,6 +2,8 @@ MAPF
 numpy
 tk
 pybind11
+pandas
+seaborn
 
 #development:
 pre-commit
