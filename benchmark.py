@@ -4,6 +4,8 @@ import os
 import time
 import shutil
 import argparse
+from typing import Optional
+
 import matplotlib.pyplot as plt
 from collections import defaultdict
 import seaborn as sns
@@ -32,6 +34,8 @@ def read_configs(args):
 
 
 def combine_config_options(args):
+    if args.config is None:
+        return [{}]
     configs = read_configs(args)  # assuming this returns a dictionary of configurations
     keys, values = zip(*configs.items())
     return [dict(zip(keys, v)) for v in itertools.product(*values)]
@@ -203,6 +207,8 @@ def main(args):
         # compilation
         compile_code()
 
+    set_env_var({"PLANNER": args.planner})
+
     timestamp_filename = generate_filename()
     output_file_folder = f"benchmark_{timestamp_filename}"
 
@@ -220,12 +226,13 @@ def main(args):
 if __name__ == "__main__":
     argParser = argparse.ArgumentParser()
     argParser.add_argument("--rebuild", action="store_true", help="Use when you want to rebuild the program")
-    argParser.add_argument("--iterations", type=int, nargs="?", default=None, help="Specify the number of iterations("
-                                                                                   "steps")
-
-    argParser.add_argument("--config", type=str, default={},
-                           help='Configuration for algorithm, heuristic, timeHorizon, '
-                                'replanningPeriod etc.')
+    argParser.add_argument("--planner", type=str, default="astar", help="name of the desired planner")
+    argParser.add_argument("--iterations", type=int, nargs="?", default=None,
+                           help="Specify the number of iterations(steps)")
+    argParser.add_argument("--config", type=str, default=None,
+                           help='Configurations to try out. Each possible combination of configs will be set as os '
+                                'environment variables and tested. - Use this to test out different parameters of your '
+                                'planner.')
 
     args = argParser.parse_args()
     main(args)

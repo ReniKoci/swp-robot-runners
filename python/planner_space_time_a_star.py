@@ -55,12 +55,15 @@ class SpaceTimeAStarPlanner(BasePlanner):
         random.seed(42)
 
     def initialize(self, preprocess_time_limit: int):
+        print(f"time limit: {preprocess_time_limit}")
         # todo use initialization time to autotune parameters (replanning_period, time_horizon, try_fix_waiting_robots,
         #  parallelization, ...)
         # todo preprocess distance maps
         return True  # todo: implement preprocessing or optimal pathfinding
 
     def plan(self, time_limit) -> list[int]:
+        if time_limit == 2147483647:  # c++ passes this if no time limit is set (max int value)
+            time_limit = None
         if self.last_planning_step + self.replanning_period <= self.env.curr_timestep:
             self.last_planning_step = self.env.curr_timestep
             return self.plan_with_random_restarts(time_limit)

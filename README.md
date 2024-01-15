@@ -48,6 +48,24 @@ If compiling doesn't work try deleting the build directory.
 ./lifelong --inputFile ../example_problems/random.domain/random_20.json -o test.json
 ```
 
+## Run with benchmark tool
+```
+python3 benchmark.py --planner "astar" --iterations 200 --config '{"restarts": ["True", "False"]}'    
+```
+```
+python3 benchmark.py --help
+usage: benchmark.py [-h] [--rebuild] [--planner PLANNER] [--iterations [ITERATIONS]] [--config CONFIG]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --rebuild             Use when you want to rebuild the program
+  --planner PLANNER     name of the desired planner
+  --iterations [ITERATIONS]
+                        Specify the number of iterations(steps)
+  --config CONFIG       Configurations to try out. Each possible combination of configs will be set as os environment variables and tested. - Use this to test out different parameters of your planner.
+```
+Benchmark tool will generate different plots in Output/ folder.
+
 ## Visualize
 - clone PlanViz into the same directory as swp-robot-runners
 - visualize the run with PlanViz by providing the map and the generated "log" file `test.json`:
