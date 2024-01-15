@@ -5,9 +5,11 @@ import time
 import shutil
 import argparse
 import matplotlib.pyplot as plt
+from collections import defaultdict
 import seaborn as sns
 import pandas as pd
 import itertools
+import ast
 
 
 # compilation
@@ -16,62 +18,70 @@ def compile_code():
     subprocess.run(compile_cmd, shell=True, check=True)
 
 
-def combine_config_options(args):
+def read_configs(args):
     # give default values in case nothing is specified for a configuration
-    heuristics = args.config.get('heuristic', ['manhattan'])
-    time_horizons = args.config.get('timeHorizon', [4])
-    replanning_periods = args.config.get('replanningPeriod', [2])
+    try:
+        # Ensure the config string is a proper dictionary format
+        # Use ast.literal_eval for safe evaluation of the string
+        config_dict = ast.literal_eval(args.config)
+        if not isinstance(config_dict, dict):
+            raise ValueError("Config input is not a valid dictionary.")
+        return config_dict
+    except (SyntaxError, ValueError) as e:
+        raise ValueError(f"Invalid config string: {e}")
 
-    combinations = itertools.product(heuristics, time_horizons, replanning_periods)
-    return combinations
+
+def combine_config_options(args):
+    configs = read_configs(args)  # assuming this returns a dictionary of configurations
+    keys, values = zip(*configs.items())
+    return [dict(zip(keys, v)) for v in itertools.product(*values)]
 
 
-def set_env_var(key, value):
-    os.environ[key] = str(value)
+def set_env_var(dct: dict):
+    for key, value in dct.items():
+        os.environ[key] = str(value)
 
 
-def plot_results(folder):
+def plot_results(folder, configs):
     json_file = f"Output/{folder}/{folder}.json"
     output_dir = f"Output/{folder}"
     with open(json_file, "r") as file:
         data = json.load(file)
 
-    # Create a DataFrame from the JSON data
-    df = pd.DataFrame(data)
+    # Function to get the cumulative count of finished tasks
+    def get_cumulative_finished(data):
+        finished_counts = defaultdict(int)
+        for event_group in data:
+            for event in event_group:
+                # 'event' is a list within a list, extract the inner list
+                for task_id, time_step, event_type in event:
+                    if event_type == "finished":
+                        finished_counts[time_step] += 1
+        cumulative = 0
+        cumulative_finished = {}
+        for time_step in sorted(finished_counts):
+            cumulative += finished_counts[time_step]
+            cumulative_finished[time_step] = cumulative
+        return cumulative_finished
 
-    # Create a pivot table for tasks_finished
-    pivot_tasks_finished = df.pivot_table(index='heuristic', columns=['time_horizon', 'replanning_period'],
-                                          values='tasks_finished')
+    # Plotting function
+    def plot_data(cumulative_finished, title, file_suffix):
+        plt.figure()
+        time_steps = list(cumulative_finished.keys())
+        finished_tasks = list(cumulative_finished.values())
+        plt.plot(time_steps, finished_tasks, marker='o')
+        plt.title(title)
+        plt.xlabel('Time Step')
+        plt.ylabel('Cumulative Finished Tasks')
+        plt.grid(True)
+        plt.savefig(f"{output_dir}/plot_{file_suffix}.png", bbox_inches='tight')
+        plt.close()
 
-    plt.figure(figsize=(12, 8))
-    sns.heatmap(pivot_tasks_finished, cmap='YlGnBu', annot=True, fmt=".1f", cbar=True)
-    plt.xlabel("Time Horizon - Replanning Period")
-    plt.ylabel("Heuristic")
-    plt.title("Tasks Finished Heatmap")
-    plt.savefig(f"{output_dir}/tasks_finished_heatmap", bbox_inches='tight')
-    plt.close()
-
-    # Create a bar plot for execution_time
-    plt.figure(figsize=(12, 8))
-    sns.barplot(x='heuristic', y='execution_time', hue='time_horizon', data=df)
-    plt.xlabel("Heuristic")
-    plt.ylabel("Execution Time (seconds)")
-    plt.title("Execution Time vs. Heuristic (Time Horizon as Hue)")
-    plt.legend(title="Time Horizon")
-    plt.xticks(rotation=45)
-    plt.savefig(f"{output_dir}/time_horizon_exe_time", bbox_inches='tight')
-    plt.close()
-
-    # Create a bar plot for tasks_finished
-    plt.figure(figsize=(12, 8))
-    sns.barplot(x='heuristic', y='tasks_finished', hue='time_horizon', data=df)
-    plt.xlabel("Heuristic")
-    plt.ylabel("Tasks Finished")
-    plt.title("Tasks Finished vs. Heuristic (Time Horizon as Hue)")
-    plt.legend(title="Time Horizon")
-    plt.xticks(rotation=45)
-    plt.savefig(f"{output_dir}/time_horizon_tasks_finished", bbox_inches='tight')
-    plt.close()
+    for config in configs:
+        config_key = tuple(config.items())
+        filtered_data = [entry['events'] for entry in data if all(entry[k] == v for k, v in config.items())]
+        cumulative_finished = get_cumulative_finished(filtered_data)
+        plot_data(cumulative_finished, f'Finished Tasks over Time for Config {config_key}', f'combined_{config_key}')
 
 
 # executing algorithm for each map
@@ -93,9 +103,12 @@ def run_iteration(input_file, iterations=None):
     with open("test.json", "r") as output_file:
         output_data = json.load(output_file)
 
-    num_tasks_finished = output_data.get("numTaskFinished", "Data not found")  # get number of tasks finished
+    # get number of tasks finished
+    num_tasks_finished = output_data.get("numTaskFinished", "Tasks not found")
+    # get the events of robots (assigned task, finished task)
+    events = output_data.get("events", "Events not found")
 
-    return num_tasks_finished, execution_time
+    return num_tasks_finished, execution_time, events
 
 
 def generate_filename():
@@ -114,22 +127,18 @@ def run_code(input_files, output_file_folder, args):
 
     # run code for each map and configuration
     for config in configs:
-        heuristic, time_horizon, replanning_period = config
-        print(heuristic, time_horizon, replanning_period)
         # save configurations as env variables
-        set_env_var("heuristic", heuristic)
-        set_env_var("time_horizon", time_horizon)
-        set_env_var("replanning_period", replanning_period)
+        set_env_var(config)
         for input_file in input_files:
-            num_task_finished, execution_time = run_iteration(input_file, iterations)
-            results.append({"file": input_file,
+            num_task_finished, execution_time, events = run_iteration(input_file, iterations)
+            result_entry = {"file": input_file,
                             "timesteps_taken": iterations,
                             "tasks_finished": num_task_finished,
                             "execution_time": execution_time,
-                            "heuristic": heuristic,
-                            "time_horizon": time_horizon,
-                            "replanning_period": replanning_period
-                            })
+                            "events": events
+                            }
+            result_entry.update(config)
+            results.append(result_entry)
 
     # create the directory if it doesn't exist
     os.makedirs("Output", exist_ok=True)
@@ -140,7 +149,7 @@ def run_code(input_files, output_file_folder, args):
         json.dump(results, output_file, indent=4)
 
     # plot the charts
-    plot_results(output_file_folder)
+    plot_results(output_file_folder, configs)
 
 
 def get_total_tasks_finished(file_name):
@@ -172,6 +181,7 @@ def compare_and_update_best_benchmark(file_name, iterations=None):
     if current_benchmark_tasks_finished > best_benchmark_tasks_finished:
         shutil.copy(file_name, "best_benchmark.json")
         print("Better benchmark found!")
+
 
 def get_timesteps():
     parser = argparse.ArgumentParser()
@@ -213,7 +223,7 @@ if __name__ == "__main__":
     argParser.add_argument("--iterations", type=int, nargs="?", default=None, help="Specify the number of iterations("
                                                                                    "steps")
 
-    argParser.add_argument("--config", type=json.loads, default=None,
+    argParser.add_argument("--config", type=str, default={},
                            help='Configuration for algorithm, heuristic, timeHorizon, '
                                 'replanningPeriod etc.')
 
