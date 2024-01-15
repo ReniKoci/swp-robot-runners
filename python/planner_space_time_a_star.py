@@ -5,9 +5,9 @@ import time
 from copy import copy
 from typing import Tuple, Set, Optional
 from queue import PriorityQueue
-from python.models import Action, BasePlanner, Heuristic, DetourPlannerPhase, AstarHighLevelPlannerType, Orientation
-from python.util import getManhattanDistance, get_neighbors, DistanceMap, get_valid_forwards_neighbor_cell, \
-    get_robot_position_map, convert_1d_to_2d_coordinate
+from models import Action, BasePlanner, Heuristic, DetourPlannerPhase, AstarHighLevelPlannerType
+from util import getManhattanDistance, get_neighbors, DistanceMap, get_valid_forwards_neighbor_cell, \
+    get_robot_position_map
 
 
 class SpaceTimeAStarPlanner(BasePlanner):
@@ -15,7 +15,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
     verbose = False
 
     def __init__(self, pyenv=None, visualize=False, animate=False, replanning_period=8, time_horizon=10, restarts=False,
-                 heuristic: Heuristic = Heuristic.TRUE_DISTANCE, high_level_planner=AstarHighLevelPlannerType) -> None:
+                 heuristic: Heuristic = Heuristic.TRUE_DISTANCE, high_level_planner=AstarHighLevelPlannerType.PRIORITY) -> None:
         super().__init__(pyenv, "Space-Time-A-Star-Planner")
         self.reservation: Set[Tuple[int, int, int]] = set()
         # (cell id 1, cell id 2, timestep relative to current timestep [one_based])
@@ -48,7 +48,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
 
         self.VISUALIZE = visualize
         if visualize:
-            from python.visualization_a_star import AStarVisualizer
+            from visualization_a_star import AStarVisualizer
             self.visualizer = AStarVisualizer()
             self.visualizer.GENERATE_ANIMATIONS = animate
         random.seed(42)

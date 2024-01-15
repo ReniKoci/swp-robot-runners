@@ -1,5 +1,5 @@
-from python.models import BasePlanner
-from python.planner_space_time_a_star import SpaceTimeAStarPlanner
+from models import BasePlanner
+from planner_space_time_a_star import SpaceTimeAStarPlanner
 import os
 import MAPF  # has to be there for the c++ application to work
 
