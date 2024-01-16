@@ -18,6 +18,10 @@ def compile_code():
     subprocess.run(compile_cmd, shell=True, check=True)
 
 
+def run_planviz(cmd):
+    subprocess.run(cmd, shell=True, check=True)
+
+
 def read_configs(args):
     # give default values in case nothing is specified for a configuration
     try:
@@ -42,46 +46,47 @@ def set_env_var(dct: dict):
         os.environ[key] = str(value)
 
 
+# Function to get the cumulative count of finished tasks
+def get_cumulative_finished(data):
+    finished_counts = defaultdict(int)
+    for event_group in data:
+        for event in event_group:
+            # 'event' is a list within a list, extract the inner list
+            for task_id, time_step, event_type in event:
+                if event_type == "finished":
+                    finished_counts[time_step] += 1
+
+    max_time_step = max(finished_counts.keys(), default=0)
+    cumulative_finished = {time_step: sum(finished_counts[key] for key in finished_counts if key <= time_step) for
+                           time_step in range(1, max_time_step + 1)}
+    return cumulative_finished
+
+
+def plot_line(cumulative_finished, title, file_suffix, output_dir):
+    plt.figure()
+    time_steps = list(cumulative_finished.keys())
+    finished_tasks = list(cumulative_finished.values())
+    plt.plot(time_steps, finished_tasks, marker='o')
+    plt.title(title)
+    plt.xlabel('Time Step')
+    plt.ylabel('Cumulative Finished Tasks')
+    plt.grid(True)
+    plt.savefig(f"{output_dir}/plot_{file_suffix}.png", bbox_inches='tight')
+    plt.close()
+
+
 def plot_results(folder, configs):
     json_file = f"Output/{folder}/{folder}.json"
     output_dir = f"Output/{folder}"
     with open(json_file, "r") as file:
         data = json.load(file)
 
-    # Function to get the cumulative count of finished tasks
-    def get_cumulative_finished(data):
-        finished_counts = defaultdict(int)
-        for event_group in data:
-            for event in event_group:
-                # 'event' is a list within a list, extract the inner list
-                for task_id, time_step, event_type in event:
-                    if event_type == "finished":
-                        finished_counts[time_step] += 1
-        cumulative = 0
-        cumulative_finished = {}
-        for time_step in sorted(finished_counts):
-            cumulative += finished_counts[time_step]
-            cumulative_finished[time_step] = cumulative
-        return cumulative_finished
-
-    # Plotting function
-    def plot_data(cumulative_finished, title, file_suffix):
-        plt.figure()
-        time_steps = list(cumulative_finished.keys())
-        finished_tasks = list(cumulative_finished.values())
-        plt.plot(time_steps, finished_tasks, marker='o')
-        plt.title(title)
-        plt.xlabel('Time Step')
-        plt.ylabel('Cumulative Finished Tasks')
-        plt.grid(True)
-        plt.savefig(f"{output_dir}/plot_{file_suffix}.png", bbox_inches='tight')
-        plt.close()
-
     for config in configs:
         config_key = tuple(config.items())
         filtered_data = [entry['events'] for entry in data if all(entry[k] == v for k, v in config.items())]
         cumulative_finished = get_cumulative_finished(filtered_data)
-        plot_data(cumulative_finished, f'Finished Tasks over Time for Config {config_key}', f'combined_{config_key}')
+        plot_line(cumulative_finished, f'Finished Tasks over Time for Config {config_key}', f'combined_{config_key}',
+                  output_dir)
 
 
 # executing algorithm for each map
@@ -160,14 +165,6 @@ def get_total_tasks_finished(file_name):
     return total_tasks_finished
 
 
-def get_timesteps_taken(file_name):
-    with open(file_name, "r") as file:
-        data = json.load(file)
-
-    timesteps_taken = sum(entry.get("timesteps_taken", 0) for entry in data)
-    return timesteps_taken
-
-
 def compare_and_update_best_benchmark(file_name, iterations=None):
     # if the best benchmark file does not exist, create it
     if not os.path.isfile("best_benchmark.json"):
@@ -181,13 +178,6 @@ def compare_and_update_best_benchmark(file_name, iterations=None):
     if current_benchmark_tasks_finished > best_benchmark_tasks_finished:
         shutil.copy(file_name, "best_benchmark.json")
         print("Better benchmark found!")
-
-
-def get_timesteps():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--simulationTime", type=int)
-    args = parser.parse_args()
-    return args.simulationTime
 
 
 def main(args):
@@ -209,6 +199,10 @@ def main(args):
     # execution
     run_code(input_files, output_file_folder, args)
 
+    # run planviz if specified
+    if args.viz:
+        run_planviz(args.viz)
+
     # check if we found a better algorithm
     # do this only when the iterations are not specified
     # this means that the code is fully running instead of testing it out with a limited number of steps
@@ -222,10 +216,18 @@ if __name__ == "__main__":
     argParser.add_argument("--rebuild", action="store_true", help="Use when you want to rebuild the program")
     argParser.add_argument("--iterations", type=int, nargs="?", default=None, help="Specify the number of iterations("
                                                                                    "steps")
+    argParser.add_argument("--reruns", type=int, nargs="?", default=1,
+                           help="Specify the amount of times to run one configuration")
 
     argParser.add_argument("--config", type=str, default={},
                            help='Configuration for algorithm, heuristic, timeHorizon, '
                                 'replanningPeriod etc.')
+
+    argParser.add_argument("--viz", type=str, nargs="?",
+                           const="python3 ../../PlanViz/script/plan_viz.py --map "
+                                 "../example_problems/random.domain/maps/random-32-32-20.map --plan ./test.json "
+                                 "--grid --aid --static --ca",
+                           help="Specify the amount of times to run one configuration")
 
     args = argParser.parse_args()
     main(args)
