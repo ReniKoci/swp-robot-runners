@@ -46,46 +46,45 @@ def set_env_var(dct: dict):
         os.environ[key] = str(value)
 
 
+def get_cumulative_finished(data):
+    finished_counts = defaultdict(int)
+    for event_group in data:
+        for event in event_group:
+            # 'event' is a list within a list, extract the inner list
+            for task_id, time_step, event_type in event:
+                if event_type == "finished":
+                    finished_counts[time_step] += 1
+
+    max_time_step = max(finished_counts.keys(), default=0)
+    cumulative_finished = {time_step: sum(finished_counts[key] for key in finished_counts if key <= time_step) for
+                           time_step in range(1, max_time_step + 1)}
+    return cumulative_finished
+
+
+def plot_data(cumulative_finished, title, file_suffix, output_dir):
+    plt.figure()
+    time_steps = list(cumulative_finished.keys())
+    finished_tasks = list(cumulative_finished.values())
+    plt.plot(time_steps, finished_tasks, marker='o')
+    plt.title(title)
+    plt.xlabel('Time Step')
+    plt.ylabel('Cumulative Finished Tasks')
+    plt.grid(True)
+    plt.savefig(f"{output_dir}/plot_{file_suffix}.png", bbox_inches='tight')
+    plt.close()
+
+
 def plot_results(folder, configs):
     json_file = f"Output/{folder}/{folder}.json"
     output_dir = f"Output/{folder}"
     with open(json_file, "r") as file:
         data = json.load(file)
 
-    # Function to get the cumulative count of finished tasks
-    def get_cumulative_finished(data):
-        finished_counts = defaultdict(int)
-        for event_group in data:
-            for event in event_group:
-                # 'event' is a list within a list, extract the inner list
-                for task_id, time_step, event_type in event:
-                    if event_type == "finished":
-                        finished_counts[time_step] += 1
-        cumulative = 0
-        cumulative_finished = {}
-        for time_step in sorted(finished_counts):
-            cumulative += finished_counts[time_step]
-            cumulative_finished[time_step] = cumulative
-        return cumulative_finished
-
-    # Plotting function
-    def plot_data(cumulative_finished, title, file_suffix):
-        plt.figure()
-        time_steps = list(cumulative_finished.keys())
-        finished_tasks = list(cumulative_finished.values())
-        plt.plot(time_steps, finished_tasks, marker='o')
-        plt.title(title)
-        plt.xlabel('Time Step')
-        plt.ylabel('Cumulative Finished Tasks')
-        plt.grid(True)
-        plt.savefig(f"{output_dir}/plot_{file_suffix}.png", bbox_inches='tight')
-        plt.close()
-
     for config in configs:
         config_key = tuple(config.items())
         filtered_data = [entry['events'] for entry in data if all(entry[k] == v for k, v in config.items())]
         cumulative_finished = get_cumulative_finished(filtered_data)
-        plot_data(cumulative_finished, f'Finished Tasks over Time for Config {config_key}', f'combined_{config_key}')
+        plot_data(cumulative_finished, f'Finished Tasks over Time for Config {config_key}', f'combined_{config_key}', output_dir)
 
 
 # executing algorithm for each map
@@ -233,6 +232,11 @@ if __name__ == "__main__":
                            help='Configurations to try out. Each possible combination of configs will be set as os '
                                 'environment variables and tested. - Use this to test out different parameters of your '
                                 'planner.')
+    argParser.add_argument("--viz", type=str, nargs="?",
+                           const="python3 ../../PlanViz/script/plan_viz.py --map "
+                                 "../example_problems/random.domain/maps/random-32-32-20.map --plan ./test.json "
+                                 "--grid --aid --static --ca",
+                           help="Specify the amount of times to run one configuration")
 
     args = argParser.parse_args()
     main(args)
