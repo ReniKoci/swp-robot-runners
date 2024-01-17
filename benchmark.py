@@ -5,11 +5,9 @@ import time
 import shutil
 import argparse
 from typing import Optional
-
 import matplotlib.pyplot as plt
 from collections import defaultdict
-import seaborn as sns
-import pandas as pd
+import numpy as np
 import itertools
 import ast
 
@@ -18,6 +16,10 @@ import ast
 def compile_code():
     compile_cmd = "sh compile.sh"
     subprocess.run(compile_cmd, shell=True, check=True)
+
+
+def run_planviz(cmd):
+    subprocess.run(cmd, shell=True, check=True)
 
 
 def read_configs(args):
@@ -46,6 +48,7 @@ def set_env_var(dct: dict):
         os.environ[key] = str(value)
 
 
+# Function to get the cumulative count of finished tasks
 def get_cumulative_finished(data):
     finished_counts = defaultdict(int)
     for event_group in data:
@@ -61,7 +64,7 @@ def get_cumulative_finished(data):
     return cumulative_finished
 
 
-def plot_data(cumulative_finished, title, file_suffix, output_dir):
+def plot_line(cumulative_finished, title, file_suffix, output_dir):
     plt.figure()
     time_steps = list(cumulative_finished.keys())
     finished_tasks = list(cumulative_finished.values())
@@ -84,7 +87,8 @@ def plot_results(folder, configs):
         config_key = tuple(config.items())
         filtered_data = [entry['events'] for entry in data if all(entry[k] == v for k, v in config.items())]
         cumulative_finished = get_cumulative_finished(filtered_data)
-        plot_data(cumulative_finished, f'Finished Tasks over Time for Config {config_key}', f'combined_{config_key}', output_dir)
+        plot_line(cumulative_finished, f'Finished Tasks over Time for Config {config_key}', f'combined_{config_key}',
+                  output_dir)
 
 
 # executing algorithm for each map
@@ -114,6 +118,10 @@ def run_iteration(input_file, iterations=None):
     return num_tasks_finished, execution_time, events
 
 
+def generate_config_str(config):
+    return ', '.join(str(value) for value in config.values())
+
+
 def generate_filename():
     return time.strftime("%Y%m%d_%H%M%S")
 
@@ -125,31 +133,49 @@ def run_code(input_files, output_file_folder, args):
     # get all configs, if a parameter is not specfified, the list will be empty
     configs = combine_config_options(args)
 
+    tasks_finished = {}
     # create a list to store results
     results = []
 
-    # run code for each map and configuration
-    for config in configs:
-        # save configurations as env variables
-        set_env_var(config)
-        for input_file in input_files:
-            num_task_finished, execution_time, events = run_iteration(input_file, iterations)
-            result_entry = {"file": input_file,
-                            "timesteps_taken": iterations,
-                            "tasks_finished": num_task_finished,
-                            "execution_time": execution_time,
-                            "events": events
-                            }
-            result_entry.update(config)
-            results.append(result_entry)
+    runs = args.reruns
+    for run in range(runs):
+        # run code for each map and configuration
+        for config in configs:
+            # save configurations as env variables
+            set_env_var(config)
+            for input_file in input_files:
+                num_task_finished, execution_time, events = run_iteration(input_file, iterations)
+                result_entry = {"file": input_file,
+                                "timesteps_taken": iterations,
+                                "tasks_finished": num_task_finished,
+                                "execution_time": execution_time,
+                                "events": events,
+                                "run": run
+                                }
+
+                result_entry.update(config)
+                results.append(result_entry)
+
+                # update dict for when same config called multiple times
+                mul_key, mul_value = generate_config_str(config), get_cumulative_finished([events])
+                if mul_key in tasks_finished:
+                    tasks_finished[mul_key].append(list(mul_value.values()))
+                else:
+                    tasks_finished[mul_key] = [list(mul_value.values())]
 
     # create the directory if it doesn't exist
     os.makedirs("Output", exist_ok=True)
     os.makedirs(f"Output/{output_file_folder}", exist_ok=True)
 
+    # save the detailed file
     file_name = f"Output/{output_file_folder}/{output_file_folder}.json"
     with open(file_name, "a") as output_file:
         json.dump(results, output_file, indent=4)
+
+    # save the number of tasks finished file
+    file_name = f"Output/{output_file_folder}/tasks_finished.json"
+    with open(file_name, "a") as output_file:
+        json.dump(tasks_finished, output_file, indent=4)
 
     # plot the charts
     plot_results(output_file_folder, configs)
@@ -161,14 +187,6 @@ def get_total_tasks_finished(file_name):
 
     total_tasks_finished = sum(entry.get("tasks_finished", 0) for entry in data)
     return total_tasks_finished
-
-
-def get_timesteps_taken(file_name):
-    with open(file_name, "r") as file:
-        data = json.load(file)
-
-    timesteps_taken = sum(entry.get("timesteps_taken", 0) for entry in data)
-    return timesteps_taken
 
 
 def compare_and_update_best_benchmark(file_name, iterations=None):
@@ -184,13 +202,6 @@ def compare_and_update_best_benchmark(file_name, iterations=None):
     if current_benchmark_tasks_finished > best_benchmark_tasks_finished:
         shutil.copy(file_name, "best_benchmark.json")
         print("Better benchmark found!")
-
-
-def get_timesteps():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--simulationTime", type=int)
-    args = parser.parse_args()
-    return args.simulationTime
 
 
 def main(args):
@@ -214,6 +225,10 @@ def main(args):
     # execution
     run_code(input_files, output_file_folder, args)
 
+    # run planviz if specified
+    if args.viz:
+        run_planviz(args.viz)
+
     # check if we found a better algorithm
     # do this only when the iterations are not specified
     # this means that the code is fully running instead of testing it out with a limited number of steps
@@ -225,18 +240,20 @@ def main(args):
 if __name__ == "__main__":
     argParser = argparse.ArgumentParser()
     argParser.add_argument("--rebuild", action="store_true", help="Use when you want to rebuild the program")
+
     argParser.add_argument("--planner", type=str, default="astar", help="name of the desired planner")
     argParser.add_argument("--iterations", type=int, nargs="?", default=None,
                            help="Specify the number of iterations(steps)")
-    argParser.add_argument("--config", type=str, default=None,
-                           help='Configurations to try out. Each possible combination of configs will be set as os '
-                                'environment variables and tested. - Use this to test out different parameters of your '
-                                'planner.')
     argParser.add_argument("--viz", type=str, nargs="?",
                            const="python3 ../../PlanViz/script/plan_viz.py --map "
                                  "../example_problems/random.domain/maps/random-32-32-20.map --plan ./test.json "
                                  "--grid --aid --static --ca",
+                           help="Specify the amount of times to run one configuration steps")
+    argParser.add_argument("--reruns", type=int, nargs="?", default=1,
                            help="Specify the amount of times to run one configuration")
+
+    argParser.add_argument("--config", type=str, default={},
+                           help='Configuration for algorithm, heuristic, timeHorizon, replanningPeriod etc.')
 
     args = argParser.parse_args()
     main(args)
