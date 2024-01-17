@@ -12,6 +12,11 @@ import itertools
 import ast
 
 
+# function to create the full path for files
+def create_filepath(filename):
+    return os.path.join(os.path.dirname(__file__), filename)
+
+
 # compilation
 def compile_code():
     compile_cmd = "sh compile.sh"
@@ -73,16 +78,53 @@ def plot_line(cumulative_finished, title, file_suffix, output_dir):
     plt.xlabel('Time Step')
     plt.ylabel('Cumulative Finished Tasks')
     plt.grid(True)
-    plt.savefig(f"{output_dir}/plot_{file_suffix}.png", bbox_inches='tight')
+    plt.savefig(create_filepath(f"{output_dir}/plot_{file_suffix}.png"), bbox_inches='tight')
     plt.close()
 
 
+def plot_line_range(data, output_dir):
+    # create new diagram
+    plt.figure(figsize=(10, 6))
+
+    # iterate through configs
+    for config, runs in data.items():
+        # covert to np for easier calculation
+        runs_array = np.array(runs)
+
+        # calculate the min, max and avarage
+        mean_values = np.mean(runs_array, axis=0)
+        min_values = np.min(runs_array, axis=0)
+        max_values = np.max(runs_array, axis=0)
+
+        # plt the avarage line
+        plt.plot(range(len(mean_values)), mean_values, label=config)
+
+        # fill in the space between min and max
+        plt.fill_between(range(len(mean_values)), min_values, max_values, alpha=0.2)
+
+        # description
+        plt.xlabel("Timestep")
+        plt.ylabel("Tasks Completed")
+        plt.title(f"Line range {config}")
+        plt.legend()
+
+        # X,Y Axis Whole Numbers
+        plt.xticks(np.arange(0, len(mean_values), step=1))
+        plt.yticks(np.arange(0, np.max(max_values) + 1, step=1))
+
+        # save as picture
+        plt.grid(True)
+        plt.savefig(create_filepath(f"{output_dir}/line_range_plot_{config}.png"), bbox_inches='tight')
+        plt.close()
+
+
 def plot_results(folder, configs):
-    json_file = f"Output/{folder}/{folder}.json"
-    output_dir = f"Output/{folder}"
+    json_file = create_filepath(f"Output/{folder}/{folder}.json")
+    output_dir = create_filepath(f"Output/{folder}")
     with open(json_file, "r") as file:
         data = json.load(file)
 
+    # line plots
     for config in configs:
         config_key = tuple(config.items())
         filtered_data = [entry['events'] for entry in data if all(entry[k] == v for k, v in config.items())]
@@ -90,16 +132,21 @@ def plot_results(folder, configs):
         plot_line(cumulative_finished, f'Finished Tasks over Time for Config {config_key}', f'combined_{config_key}',
                   output_dir)
 
+    # range line plots - different setup due Gabriel's implementation
+    filename_tasks_finished = create_filepath(f"Output/{folder}/tasks_finished.json")
+    with open(filename_tasks_finished, "r") as file:
+        tasks_finished = json.load(file)
+    plot_line_range(tasks_finished, output_dir)
+
 
 # executing algorithm for each map
 def run_iteration(input_file, iterations=None):
     map_file_location = "./example_problems/" + input_file
-
-    run_cmd = f"./build/lifelong --inputFile {map_file_location} -o test.json"
+    run_cmd = create_filepath(f"build/lifelong --inputFile {map_file_location} -o test.json")
 
     if iterations:
         run_cmd += f" --simulationTime {iterations}"
-
+    print(run_cmd)
     # start execution time
     start_time = time.time()
     subprocess.run(run_cmd, shell=True, check=True)
@@ -107,7 +154,7 @@ def run_iteration(input_file, iterations=None):
     # end execution time
 
     # get the output file and read data
-    with open("test.json", "r") as output_file:
+    with open(create_filepath("test.json"), "r") as output_file:
         output_data = json.load(output_file)
 
     # get number of tasks finished
@@ -126,7 +173,7 @@ def generate_filename():
     return time.strftime("%Y%m%d_%H%M%S")
 
 
-def run_code(input_files, output_file_folder, args):
+def run_code(input_file, output_file_folder, args):
     # get number of iterations if specified
     iterations = args.iterations
 
@@ -143,37 +190,37 @@ def run_code(input_files, output_file_folder, args):
         for config in configs:
             # save configurations as env variables
             set_env_var(config)
-            for input_file in input_files:
-                num_task_finished, execution_time, events = run_iteration(input_file, iterations)
-                result_entry = {"file": input_file,
-                                "timesteps_taken": iterations,
-                                "tasks_finished": num_task_finished,
-                                "execution_time": execution_time,
-                                "events": events,
-                                "run": run
-                                }
 
-                result_entry.update(config)
-                results.append(result_entry)
+            num_task_finished, execution_time, events = run_iteration(input_file, iterations)
+            result_entry = {"file": input_file,
+                            "timesteps_taken": iterations,
+                            "tasks_finished": num_task_finished,
+                            "execution_time": execution_time,
+                            "events": events,
+                            "run": run
+                            }
 
-                # update dict for when same config called multiple times
-                mul_key, mul_value = generate_config_str(config), get_cumulative_finished([events])
-                if mul_key in tasks_finished:
-                    tasks_finished[mul_key].append(list(mul_value.values()))
-                else:
-                    tasks_finished[mul_key] = [list(mul_value.values())]
+            result_entry.update(config)
+            results.append(result_entry)
+
+            # update dict for when same config called multiple times
+            mul_key, mul_value = generate_config_str(config), get_cumulative_finished([events])
+            if mul_key in tasks_finished:
+                tasks_finished[mul_key].append(list(mul_value.values()))
+            else:
+                tasks_finished[mul_key] = [list(mul_value.values())]
 
     # create the directory if it doesn't exist
-    os.makedirs("Output", exist_ok=True)
-    os.makedirs(f"Output/{output_file_folder}", exist_ok=True)
+    os.makedirs(create_filepath("Output"), exist_ok=True)
+    os.makedirs(create_filepath(f"Output/{output_file_folder}"), exist_ok=True)
 
     # save the detailed file
-    file_name = f"Output/{output_file_folder}/{output_file_folder}.json"
+    file_name = create_filepath(f"Output/{output_file_folder}/{output_file_folder}.json")
     with open(file_name, "a") as output_file:
         json.dump(results, output_file, indent=4)
 
     # save the number of tasks finished file
-    file_name = f"Output/{output_file_folder}/tasks_finished.json"
+    file_name = create_filepath(f"Output/{output_file_folder}/tasks_finished.json")
     with open(file_name, "a") as output_file:
         json.dump(tasks_finished, output_file, indent=4)
 
@@ -205,14 +252,7 @@ def compare_and_update_best_benchmark(file_name, iterations=None):
 
 
 def main(args):
-    # running using different maps
-    input_files = [
-        "random.domain/random_20.json",
-        # "random.domain/random_50.json",
-        # "random_100.json",
-        # "random_200.json"
-    ]
-
+    # check if user wants to rebuild lifelong file
     if args.rebuild:
         # compilation
         compile_code()
@@ -223,7 +263,7 @@ def main(args):
     output_file_folder = f"benchmark_{timestamp_filename}"
 
     # execution
-    run_code(input_files, output_file_folder, args)
+    run_code(args.file, output_file_folder, args)
 
     # run planviz if specified
     if args.viz:
@@ -252,8 +292,12 @@ if __name__ == "__main__":
     argParser.add_argument("--reruns", type=int, nargs="?", default=1,
                            help="Specify the amount of times to run one configuration")
 
-    argParser.add_argument("--config", type=str, default={},
+    argParser.add_argument("--config", type=str, default=None,
                            help='Configuration for algorithm, heuristic, timeHorizon, replanningPeriod etc.')
 
+    argParser.add_argument("--file", type=str, default="random.domain/random_20.json",
+                           help="Location of the map to run the algorithm on (e.g. random.domain/random_20.json)")
+
     args = argParser.parse_args()
+
     main(args)
