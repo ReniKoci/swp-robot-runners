@@ -6,8 +6,7 @@ import shutil
 import argparse
 import matplotlib.pyplot as plt
 from collections import defaultdict
-import seaborn as sns
-import pandas as pd
+import numpy as np
 import itertools
 import ast
 
@@ -116,6 +115,10 @@ def run_iteration(input_file, iterations=None):
     return num_tasks_finished, execution_time, events
 
 
+def generate_config_str(config):
+    return ', '.join(str(value) for value in config.values())
+
+
 def generate_filename():
     return time.strftime("%Y%m%d_%H%M%S")
 
@@ -127,31 +130,49 @@ def run_code(input_files, output_file_folder, args):
     # get all configs, if a parameter is not specfified, the list will be empty
     configs = combine_config_options(args)
 
+    tasks_finished = {}
     # create a list to store results
     results = []
 
-    # run code for each map and configuration
-    for config in configs:
-        # save configurations as env variables
-        set_env_var(config)
-        for input_file in input_files:
-            num_task_finished, execution_time, events = run_iteration(input_file, iterations)
-            result_entry = {"file": input_file,
-                            "timesteps_taken": iterations,
-                            "tasks_finished": num_task_finished,
-                            "execution_time": execution_time,
-                            "events": events
-                            }
-            result_entry.update(config)
-            results.append(result_entry)
+    runs = args.reruns
+    for run in range(runs):
+        # run code for each map and configuration
+        for config in configs:
+            # save configurations as env variables
+            set_env_var(config)
+            for input_file in input_files:
+                num_task_finished, execution_time, events = run_iteration(input_file, iterations)
+                result_entry = {"file": input_file,
+                                "timesteps_taken": iterations,
+                                "tasks_finished": num_task_finished,
+                                "execution_time": execution_time,
+                                "events": events,
+                                "run": run
+                                }
+
+                result_entry.update(config)
+                results.append(result_entry)
+
+                # update dict for when same config called multiple times
+                mul_key, mul_value = generate_config_str(config), get_cumulative_finished([events])
+                if mul_key in tasks_finished:
+                    tasks_finished[mul_key].append(list(mul_value.values()))
+                else:
+                    tasks_finished[mul_key] = [list(mul_value.values())]
 
     # create the directory if it doesn't exist
     os.makedirs("Output", exist_ok=True)
     os.makedirs(f"Output/{output_file_folder}", exist_ok=True)
 
+    # save the detailed file
     file_name = f"Output/{output_file_folder}/{output_file_folder}.json"
     with open(file_name, "a") as output_file:
         json.dump(results, output_file, indent=4)
+
+    # save the number of tasks finished file
+    file_name = f"Output/{output_file_folder}/tasks_finished.json"
+    with open(file_name, "a") as output_file:
+        json.dump(tasks_finished, output_file, indent=4)
 
     # plot the charts
     plot_results(output_file_folder, configs)
