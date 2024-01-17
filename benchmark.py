@@ -45,7 +45,20 @@ def combine_config_options(args):
         return [{}]
     configs = read_configs(args)  # assuming this returns a dictionary of configurations
     keys, values = zip(*configs.items())
-    return [dict(zip(keys, v)) for v in itertools.product(*values)]
+
+    config_combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
+
+    # add runs to the config, the reason is so that the script plots graphs for each run
+    runs_combinations = range(1, args.reruns + 1)  # Corrected to use args.reruns
+
+    # Cross product of configurations and runs
+    result = []
+    for run in runs_combinations:
+        for config in config_combinations:
+            config['run'] = run
+            result.append(dict(config))  # Create a new dictionary for each run
+
+    return result
 
 
 def set_env_var(dct: dict):
@@ -166,7 +179,9 @@ def run_iteration(input_file, iterations=None):
 
 
 def generate_config_str(config):
-    return ', '.join(str(value) for value in config.values())
+    # Exclude 'run' key from the configuration dictionary
+    config_without_run = {key: value for key, value in config.items() if key != 'run'}
+    return ', '.join(str(value) for value in config_without_run.values())
 
 
 def generate_filename():
@@ -179,36 +194,31 @@ def run_code(input_file, output_file_folder, args):
 
     # get all configs, if a parameter is not specfified, the list will be empty
     configs = combine_config_options(args)
-
     tasks_finished = {}
     # create a list to store results
     results = []
+    # run code for each map and configuration
+    for config in configs:
+        # save configurations as env variables
+        set_env_var(config)
 
-    runs = args.reruns
-    for run in range(runs):
-        # run code for each map and configuration
-        for config in configs:
-            # save configurations as env variables
-            set_env_var(config)
+        num_task_finished, execution_time, events = run_iteration(input_file, iterations)
+        result_entry = {"file": input_file,
+                        "timesteps_taken": iterations,
+                        "tasks_finished": num_task_finished,
+                        "execution_time": execution_time,
+                        "events": events
+                        }
 
-            num_task_finished, execution_time, events = run_iteration(input_file, iterations)
-            result_entry = {"file": input_file,
-                            "timesteps_taken": iterations,
-                            "tasks_finished": num_task_finished,
-                            "execution_time": execution_time,
-                            "events": events,
-                            "run": run
-                            }
+        result_entry.update(config)
+        results.append(result_entry)
 
-            result_entry.update(config)
-            results.append(result_entry)
-
-            # update dict for when same config called multiple times
-            mul_key, mul_value = generate_config_str(config), get_cumulative_finished([events])
-            if mul_key in tasks_finished:
-                tasks_finished[mul_key].append(list(mul_value.values()))
-            else:
-                tasks_finished[mul_key] = [list(mul_value.values())]
+        # update dict for when same config called multiple times
+        mul_key, mul_value = generate_config_str(config), get_cumulative_finished([events])
+        if mul_key in tasks_finished:
+            tasks_finished[mul_key].append(list(mul_value.values()))
+        else:
+            tasks_finished[mul_key] = [list(mul_value.values())]
 
     # create the directory if it doesn't exist
     os.makedirs(create_filepath("Output"), exist_ok=True)
