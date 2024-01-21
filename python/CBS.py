@@ -71,7 +71,9 @@ class CTree:
 
 
 class HighLevelSolver:  #CBS High Level
-    
+    def __init__(self) -> None:
+        pass
+
     # Returns true if there is a conflict between two given routes (in first n time steps) 
     @dispatch(list, list, int)
     def hasConflict(path1, path2, n):
@@ -345,3 +347,82 @@ class HighLevelSolver:  #CBS High Level
 # print(test.vertex_1)
 # print(test.vertex_2)
 # print(test.time)
+
+
+from typing import List, Tuple
+import heapq
+
+class Node:
+    def __init__(self, position, g=0, h=0, parent=None):
+        self.position = position
+        self.g = g  # Cost from start to current Node
+        self.h = h  # Heuristic cost from current Node to goal
+        self.f = g + h  # Total cost
+        self.parent = parent  # Parent Node
+
+    def __lt__(self, other):
+        return self.f < other.f
+
+class LowLevelSolver:
+    def __init__(self, grid, start, goal, constraints=None):
+        self.grid = grid
+        self.start = start
+        self.goal = goal
+        self.constraints = constraints if constraints else []
+
+    def heuristic(self, position):
+        return abs(position[0] - self.goal[0]) + abs(position[1] - self.goal[1])
+
+    def get_neighbors(self, position):
+        x, y = position
+        neighbors = []
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < len(self.grid) and 0 <= ny < len(self.grid[0]) and self.grid[nx][ny] == 0:
+                neighbors.append((nx, ny))
+        return neighbors
+
+    def is_constrained(self, position, time):
+        return (position, time) in self.constraints
+
+    def a_star_search(self):
+        open_set = []
+        start_node = Node(self.start, 0, self.heuristic(self.start))
+        heapq.heappush(open_set, start_node)
+
+        while open_set:
+            current_node = heapq.heappop(open_set)
+
+            if current_node.position == self.goal:
+                return self.reconstruct_path(current_node)
+
+            for neighbor in self.get_neighbors(current_node.position):
+                if self.is_constrained(neighbor, current_node.g + 1):
+                    continue
+                neighbor_node = Node(neighbor, current_node.g + 1, self.heuristic(neighbor), current_node)
+                heapq.heappush(open_set, neighbor_node)
+
+        return None  # Path not found
+
+    def reconstruct_path(self, node):
+        path = []
+        while node:
+            path.append(node.position)
+            node = node.parent
+        return path[::-1]
+
+# Dummy Inputs for Testing
+grid = [[0, 0, 0, 0, 0],
+        [0, 1, 1, 0, 0],
+        [0, 0, 0, 1, 0],
+        [0, 1, 0, 0, 0],
+        [0, 0, 0, 0, 0]]
+start = (0, 0)
+goal = (4, 4)
+constraints = [((1, 3), 2), ((2, 2), 3)]  # Example: ((x, y), time)
+
+# Create an instance of LowLevelSolver with the dummy inputs
+solver = LowLevelSolver(grid, start, goal, constraints)
+path = solver.a_star_search()
+
+print("Path found:", path)
