@@ -11,6 +11,7 @@ import numpy as np
 import itertools
 import ast
 
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "Output")
 
 # function to create the full path for files
 def create_filepath(filename):
@@ -82,74 +83,40 @@ def get_cumulative_finished(data):
     return cumulative_finished
 
 
-def plot_line(cumulative_finished, title, file_suffix, output_dir):
-    plt.figure()
-    time_steps = list(cumulative_finished.keys())
-    finished_tasks = list(cumulative_finished.values())
-    plt.plot(time_steps, finished_tasks, marker='o')
-    plt.title(title)
-    plt.xlabel('Time Step')
-    plt.ylabel('Cumulative Finished Tasks')
-    plt.grid(True)
-    plt.savefig(create_filepath(f"{output_dir}/plot_{file_suffix}.png"), bbox_inches='tight')
-    plt.close()
-
-
-def plot_line_range(data, output_dir):
-    # create new diagram
+def plot_line_range(data: dict[str, list[list[int]]], output_path: str):
     plt.figure(figsize=(10, 6))
-
-    # iterate through configs
     for config, runs in data.items():
-        # covert to np for easier calculation
+        print(config)
         runs_array = np.array(runs)
-
-        # calculate the min, max and avarage
         mean_values = np.mean(runs_array, axis=0)
         min_values = np.min(runs_array, axis=0)
         max_values = np.max(runs_array, axis=0)
 
-        # plt the avarage line
+        # plt the average line
         plt.plot(range(len(mean_values)), mean_values, label=config)
 
         # fill in the space between min and max
         plt.fill_between(range(len(mean_values)), min_values, max_values, alpha=0.2)
 
-        # description
-        plt.xlabel("Timestep")
-        plt.ylabel("Tasks Completed")
-        plt.title(f"Line range {config}")
-        plt.legend()
+    # description
+    plt.xlabel("Timestep")
+    plt.ylabel("Tasks Completed")
+    plt.title("Throughput at step x")
+    plt.legend()
 
-        # X,Y Axis Whole Numbers
-        plt.xticks(np.arange(0, len(mean_values), step=1))
-        plt.yticks(np.arange(0, np.max(max_values) + 1, step=1))
+    # X,Y Axis Whole Numbers
+    plt.xticks(np.arange(0, len(mean_values), step=5))
+    plt.yticks(np.arange(0, np.max(max_values) + 1, step=5))
 
-        # save as picture
-        plt.grid(True)
-        plt.savefig(create_filepath(f"{output_dir}/line_range_plot_{config}.png"), bbox_inches='tight')
-        plt.close()
+    # save as picture
+    plt.savefig(output_path)
 
 
-def plot_results(folder, configs):
-    json_file = create_filepath(f"Output/{folder}/{folder}.json")
-    output_dir = create_filepath(f"Output/{folder}")
-    with open(json_file, "r") as file:
-        data = json.load(file)
-
-    # line plots
-    for config in configs:
-        config_key = tuple(config.items())
-        filtered_data = [entry['events'] for entry in data if all(entry[k] == v for k, v in config.items())]
-        cumulative_finished = get_cumulative_finished(filtered_data)
-        plot_line(cumulative_finished, f'Finished Tasks over Time for Config {config_key}', f'combined_{config_key}',
-                  output_dir)
-
-    # range line plots - different setup due Gabriel's implementation
-    filename_tasks_finished = create_filepath(f"Output/{folder}/tasks_finished.json")
+def plot_results(run_dir, configs):
+    filename_tasks_finished = create_filepath(f"{run_dir}/tasks_finished.json")
     with open(filename_tasks_finished, "r") as file:
         tasks_finished = json.load(file)
-    plot_line_range(tasks_finished, output_dir)
+    plot_line_range(tasks_finished, f"{run_dir}/tasks_finished.png")
 
 
 # executing algorithm for each map
@@ -180,8 +147,7 @@ def run_iteration(input_file, iterations=None):
 
 def generate_config_str(config):
     # Exclude 'run' key from the configuration dictionary
-    config_without_run = {key: value for key, value in config.items() if key != 'run'}
-    return ', '.join(str(value) for value in config_without_run.values())
+    return ", ".join(f"{key}: {str(value)}" for key, value in config.items() if key != "run")
 
 
 def generate_filename():
@@ -198,6 +164,9 @@ def run_code(input_file, output_file_folder, args):
     # create a list to store results
     results = []
     # run code for each map and configuration
+    run_dir_path = os.path.join(OUTPUT_DIR, output_file_folder)
+    os.makedirs(create_filepath(run_dir_path), exist_ok=True)
+
     for config in configs:
         # save configurations as env variables
         set_env_var(config)
@@ -220,22 +189,18 @@ def run_code(input_file, output_file_folder, args):
         else:
             tasks_finished[mul_key] = [list(mul_value.values())]
 
-    # create the directory if it doesn't exist
-    os.makedirs(create_filepath("Output"), exist_ok=True)
-    os.makedirs(create_filepath(f"Output/{output_file_folder}"), exist_ok=True)
-
     # save the detailed file
-    file_name = create_filepath(f"Output/{output_file_folder}/{output_file_folder}.json")
+    file_name = create_filepath(f"{run_dir_path}/{output_file_folder}.json")
     with open(file_name, "a") as output_file:
         json.dump(results, output_file, indent=4)
 
     # save the number of tasks finished file
-    file_name = create_filepath(f"Output/{output_file_folder}/tasks_finished.json")
+    file_name = create_filepath(f"{run_dir_path}/tasks_finished.json")
     with open(file_name, "a") as output_file:
         json.dump(tasks_finished, output_file, indent=4)
 
     # plot the charts
-    plot_results(output_file_folder, configs)
+    plot_results(run_dir_path, configs)
 
 
 def get_total_tasks_finished(file_name):

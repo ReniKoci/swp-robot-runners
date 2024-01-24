@@ -103,6 +103,7 @@ class UtilTest(unittest.TestCase):
         # each line represents a config
         # save the chart as a file
 
+
     def test_generate_visualization_for_benchmark_tool_with_range(self):
         # <config name>, <tasks completed at timestep x>
         # one config has multiple runs (because of randomness they sometimes perform better or worse)
@@ -121,17 +122,40 @@ class UtilTest(unittest.TestCase):
                 [1, 1, 2, 2, 2, 4, 4, 4, 4, 5, 7, 7, 8, 10, 10, 12, 14, 14, 15],
                 [1, 1, 1, 2, 2, 4, 4, 4, 4, 4, 5, 7, 8, 9, 9, 9, 9, 10, 13],
                 [2, 2, 4, 4, 4, 4, 4, 5, 7, 8, 9, 9, 9, 9, 10, 13, 14, 17, 18],
-            ]
+            ],
         }
-        print("hello")
-        print("hello")
-        print("hello")
-        print("hello")
-        print("hello")
 
-        # use matplotlib to generate a line chart
-        # x - axis: timestep
-        # y - axis: tasks completed
-        # for each config and each step, calculate the mean and min and max
-        # the main graph line should be the mean for each config / step
-        # there should be a shaded area between the min and max (for reference look at the issue: https://github.com/users/AcronRK/projects/1/views/1?pane=issue&itemId=49548544)
+        # create new diagram
+        plt.figure(figsize=(10, 6))
+
+        # iterate through configs
+        for config, runs in data.items():
+            # covert to np for easier calculation
+            runs_array = np.array(runs)
+
+            # calculate the min, max and avarage
+            mean_values = np.mean(runs_array, axis=0)
+            min_values = np.min(runs_array, axis=0)
+            max_values = np.max(runs_array, axis=0)
+
+            # plt the avarage line
+            plt.plot(range(len(mean_values)), mean_values, label=config)
+
+            # fill in the space between min and max
+            plt.fill_between(range(len(mean_values)), min_values, max_values, alpha=0.2)
+
+        # description
+        plt.xlabel("Timestep")
+        plt.ylabel("Tasks Completed")
+        plt.title("Benchmark Tool Visualization with Range")
+        plt.legend()
+
+        # X,Y Axis Whole Numbers
+        plt.xticks(np.arange(0, len(mean_values), step=1))
+        plt.yticks(np.arange(0, np.max(max_values) + 1, step=1))
+
+        # save as picture
+        #plt.savefig("Benchmarktool_viz_avarage.png")
+
+        # show diagram
+        plt.show()
