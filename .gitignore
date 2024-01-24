@@ -7,5 +7,6 @@ venv
 test.json
 local
 compile.sh
+.DS_Store
 upgrade_start_kit.sh
 python/__pycache__/*
