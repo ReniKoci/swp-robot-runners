@@ -2,6 +2,7 @@ import os
 from models import BasePlanner
 from planner_CBS import CBSPlanner
 from planner_space_time_a_star import SpaceTimeAStarPlanner
+from planner_increasing_cost_tree_search import IncreasingCostTreeSearchPlanner
 import MAPF  # has to be there for the c++ application to work
 
 
@@ -14,8 +15,7 @@ class pyMAPFPlanner:  # this is the wrapper class that will be called by the c++
         if desired_planner == "astar":
             self.planner = SpaceTimeAStarPlanner(pyenv)
         elif desired_planner == "ICTS":
-            pass
-            # todo: add your planner here: self.planner = ICTSPlanner(pyenv)
+            self.planner = IncreasingCostTreeSearchPlanner(pyenv)
         elif desired_planner == "CBS":
             self.planner = CBSPlanner(pyenv)
         else:
