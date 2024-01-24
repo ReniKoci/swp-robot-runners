@@ -280,34 +280,6 @@ def reverse(current_dir: int) -> int:
     return (current_dir + 2)%4
 
 
-#distance_maps = []
-#def init_distance_maps(env: Env):
-#    print("Initialize distance map")
-#    self.distance_maps = [None]*env.rows*env.cols
-#
-#def access_distance_maps(env: Env, start_pos: int, start_dir: int, goal: int):
-#    if self.distance_maps[goal] == None:
-#        print("Calculate Distance map for", goal)
-#        self.distance_maps[goal] = [None]*env.rows*env.cols
-#        for i in range(len(self.distance_maps[goal])):
-#            self.distance_maps[goal][i] = [None]*4
-#
-#        pos_dir_set = [(goal, 0, 0), (goal, 1, 0), (goal, 2, 0), (goal, 3, 0)]
-#        for pos, dir, costs in pos_dir_set:
-#            if self.distance_maps[goal][pos][dir] == None:
-#                self.distance_maps[goal][pos][dir] = costs
-#                backward = self.forward(pos, self.reverse(dir))
-#                if backward >= 0 and (backward, dir) not in [(x[0], x[1]) for x in pos_dir_set]:
-#                    pos_dir_set.append((backward, dir, costs + 1))
-#                ccr = self.counter_clockwise_rotate(dir)
-#                if (pos, ccr) not in [(x[0], x[1]) for x in pos_dir_set]:
-#                    pos_dir_set.append((pos, ccr, costs + 1))
-#                cr = self.clockwise_rotate(dir)
-#                if (pos, cr) not in [(x[0], x[1]) for x in pos_dir_set]:
-#                    pos_dir_set.append((pos, cr, costs + 1))
-#    return self.distance_maps[goal][start_pos][start_dir]
-
-
 def convert_1d_to_2d_coordinate(location: int, cols: int) -> tuple[int, int]:
     y = location // cols
     x = location % cols
