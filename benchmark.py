@@ -13,6 +13,7 @@ import ast
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "Output")
 
+
 # function to create the full path for files
 def create_filepath(filename):
     return os.path.join(os.path.dirname(__file__), filename)
@@ -24,7 +25,32 @@ def compile_code():
     subprocess.run(compile_cmd, shell=True, check=True)
 
 
-def run_planviz(cmd):
+def get_map_name(input_file):
+    file_name = "./example_problems/" + input_file
+    with open(file_name, "r") as file:
+        data = json.load(file)
+    return data.get("mapFile")
+
+
+def get_map_path(input_file):
+    map_file = get_map_name(input_file)
+    domain_name = input_file[:input_file.find("/")]
+    return "../example_problems/" + domain_name + "/" + map_file
+
+
+def run_planviz(args):
+    if args.viz == "no-path-provided":
+        path = (f"../../PlanViz/script/plan_viz.py --map {get_map_path(args.file)}"
+                " --plan ./test.json --grid --aid "
+                "--static --ca")
+    else:
+        # if path provided (wthout the arguments)
+        # example -> ./../PlanViz/script/plan_viz.py
+        path = (f"{args.viz} --map {get_map_path(args.file)}"
+                " --plan ./test.json --grid --aid "
+                "--static --ca")
+
+    cmd = f"python3 {path}"
     subprocess.run(cmd, shell=True, check=True)
 
 
@@ -242,7 +268,7 @@ def main(args):
 
     # run planviz if specified
     if args.viz:
-        run_planviz(args.viz)
+        run_planviz(args)
 
     # check if we found a better algorithm
     # do this only when the iterations are not specified
@@ -254,16 +280,18 @@ def main(args):
 
 if __name__ == "__main__":
     argParser = argparse.ArgumentParser()
+
     argParser.add_argument("--rebuild", action="store_true", help="Use when you want to rebuild the program")
 
     argParser.add_argument("--planner", type=str, default="astar", help="name of the desired planner")
+
     argParser.add_argument("--iterations", type=int, nargs="?", default=None,
                            help="Specify the number of iterations(steps)")
+
     argParser.add_argument("--viz", type=str, nargs="?",
-                           const="python3 ../../PlanViz/script/plan_viz.py --map "
-                                 "../example_problems/random.domain/maps/random-32-32-20.map --plan ./test.json "
-                                 "--grid --aid --static --ca",
-                           help="Specify the amount of times to run one configuration steps")
+                           const="no-path-provided",
+                           help="If specified, the last call of the algorithm will run in planviz")
+
     argParser.add_argument("--reruns", type=int, nargs="?", default=1,
                            help="Specify the amount of times to run one configuration")
 
