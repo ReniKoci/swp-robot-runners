@@ -4,12 +4,14 @@ import os
 import time
 import shutil
 import argparse
+import pandas as pd
 from typing import Optional
 import matplotlib.pyplot as plt
 from collections import defaultdict
 import numpy as np
 import itertools
 import ast
+import seaborn as sns
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "Output")
 
@@ -125,7 +127,7 @@ def plot_line_range(data: dict[str, list[list[int]]], output_path: str):
         plt.fill_between(range(len(mean_values)), min_values, max_values, alpha=0.2)
 
     # description
-    plt.xlabel("Timestep")
+    plt.xlabel("Iteration")
     plt.ylabel("Tasks Completed")
     plt.title("Throughput at step x")
     plt.legend()
@@ -138,11 +140,45 @@ def plot_line_range(data: dict[str, list[list[int]]], output_path: str):
     plt.savefig(output_path)
 
 
+def plot_proc_times(tasks_finished, output_path: str):
+    # Convert JSON data to a pandas DataFrame
+    df_list = []
+    for key, values in tasks_finished.items():
+        for idx, timestamps in enumerate(values):
+            for timestamp, value in enumerate(timestamps):
+                df_list.append({'Config': key, 'Timestamp': timestamp, 'Value': value})
+
+    df = pd.DataFrame(df_list)
+
+    # Calculate the mean for each timestamp and key
+    mean_df = df.groupby(['Timestamp', 'Config']).mean().reset_index()
+
+    # Plot using seaborn
+    sns.set(style="whitegrid")
+    plt.figure(figsize=(12, 8))
+    sns.barplot(x='Timestamp', y='Value', hue='Config', data=mean_df, palette="Set1")
+
+    plt.title('Processing time by configurations)')
+    plt.xlabel('Iteration')
+    plt.ylabel('Processing time (seconds)')
+    plt.legend(title='Config')
+
+    # save as picture
+    plt.savefig(output_path)
+
+
 def plot_results(run_dir, configs):
+    # number of tasks finished per config
     filename_tasks_finished = create_filepath(f"{run_dir}/tasks_finished.json")
     with open(filename_tasks_finished, "r") as file:
         tasks_finished = json.load(file)
     plot_line_range(tasks_finished, f"{run_dir}/tasks_finished.png")
+
+    # processing time taken for each step for each config
+    filename_tasks_finished = create_filepath(f"{run_dir}/processing_times.json")
+    with open(filename_tasks_finished, "r") as file:
+        processing_times = json.load(file)
+    plot_proc_times(processing_times, f"{run_dir}/processing_times.png")
 
 
 # executing algorithm for each map
@@ -167,8 +203,10 @@ def run_iteration(input_file, iterations=None):
     num_tasks_finished = output_data.get("numTaskFinished", "Tasks not found")
     # get the events of robots (assigned task, finished task)
     events = output_data.get("events", "Events not found")
+    # get the processing times for each step
+    planner_times = output_data.get("plannerTimes", "Events not found")
 
-    return num_tasks_finished, execution_time, events
+    return num_tasks_finished, execution_time, events, planner_times
 
 
 def generate_config_str(config):
@@ -183,10 +221,11 @@ def generate_filename():
 def run_code(input_file, output_file_folder, args):
     # get number of iterations if specified
     iterations = args.iterations
-
+    # dictionaries to store the number of tasks and processing time for each config
+    tasks_finished = {}
+    processing_times = {}
     # get all configs, if a parameter is not specfified, the list will be empty
     configs = combine_config_options(args)
-    tasks_finished = {}
     # create a list to store results
     results = []
     # run code for each map and configuration
@@ -197,7 +236,7 @@ def run_code(input_file, output_file_folder, args):
         # save configurations as env variables
         set_env_var(config)
 
-        num_task_finished, execution_time, events = run_iteration(input_file, iterations)
+        num_task_finished, execution_time, events, planner_times = run_iteration(input_file, iterations)
         result_entry = {"file": input_file,
                         "timesteps_taken": iterations,
                         "tasks_finished": num_task_finished,
@@ -215,6 +254,12 @@ def run_code(input_file, output_file_folder, args):
         else:
             tasks_finished[mul_key] = [list(mul_value.values())]
 
+        # create a dict for planning times
+        if mul_key in processing_times:
+            processing_times[mul_key].append(list(planner_times))
+        else:
+            processing_times[mul_key] = [list(planner_times)]
+
     # save the detailed file
     file_name = create_filepath(f"{run_dir_path}/{output_file_folder}.json")
     with open(file_name, "a") as output_file:
@@ -224,6 +269,11 @@ def run_code(input_file, output_file_folder, args):
     file_name = create_filepath(f"{run_dir_path}/tasks_finished.json")
     with open(file_name, "a") as output_file:
         json.dump(tasks_finished, output_file, indent=4)
+
+    # save the number of processing time for each step for each config
+    file_name = create_filepath(f"{run_dir_path}/processing_times.json")
+    with open(file_name, "a") as output_file:
+        json.dump(processing_times, output_file, indent=4)
 
     # plot the charts
     plot_results(run_dir_path, configs)
