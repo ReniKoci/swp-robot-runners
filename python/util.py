@@ -21,6 +21,14 @@ class DistanceMap:
         self.distance_map: list[Optional[int]] = [None] * (number_of_cells * 4)
         self.last_start = None
 
+        # add starting point for search (the target cell)
+        for orientation in range(4):
+            g = 0
+            h = 0  # those values will be calculated when the start pos is known, no need to do it now
+            f = 0  # those values will be calculated when the start pos is known, no need to do it now
+            self.open_list.put((f, h, g, self.target, orientation))
+            self.distance_map[self.target * 4 + orientation] = 0
+
     def get_distance(self, env: Env, start_cell: int, start_orientation: int) -> int:
         """
         Returns the shortest distance from start_cell to the target cell.
@@ -30,20 +38,11 @@ class DistanceMap:
         :param start_orientation:
         :return:
         """
-        if self.open_list.empty() and self.close_list:
-            raise RuntimeError(f"no valid path found from {start_cell} to {self.target}")
-
-        # add target as starting point if this is the first call
-        if self.open_list.empty():
-            for orientation in range(4):
-                g = 0
-                h = getManhattanDistance(env, self.target, start_cell)
-                f = g + h
-                self.open_list.put((f, h, g, self.target, orientation))
-                self.distance_map[self.target * 4 + orientation] = 0
-
         if (dist := self.distance_map[start_cell * 4 + start_orientation]) is not None:
             return dist
+
+        if self.open_list.empty() and self.close_list:
+            raise RuntimeError(f"no valid path found from {start_cell} to {self.target}")
 
         if self.last_start != start_cell:
             # update all h values in open_list
@@ -59,6 +58,7 @@ class DistanceMap:
         # do backwards A* to get distance (target -> start_cell)
         target = start_cell
         target_orientation = start_orientation
+        solution_found = None
         while not self.open_list.empty():
             f, h, g, position, orientation = (self.open_list.get())
             self.close_list.add(position * 4 + orientation)
@@ -77,8 +77,15 @@ class DistanceMap:
                 if shortest_distance is None or neighbor_g < shortest_distance:
                     self.distance_map[pos_ori_hash] = neighbor_g
                 if neighbor_position == target and neighbor_orientation == target_orientation:
-                    return neighbor_g
-        raise RuntimeError(f"no valid path found from {start_cell} to {self.target}")
+                    solution_found = neighbor_g
+            if solution_found is not None:
+                return solution_found
+        # something went wrong
+        with open("distance_map.pkl", "wb") as f:
+            import pickle
+            pickle.dump((self.target, self.close_list, self.distance_map, self.last_start), f)
+        raise RuntimeError(f"no valid path found from {start_cell} to {self.target}. "
+                           f"Distance map was saved as distance_map.pkl for debugging.")
 
 
 def a_star(env, start: int, start_direct: int, end: int):

@@ -203,7 +203,7 @@ def load_map(map_file_path) -> tuple[list[int], int, int]:
     map_lines = lines[map_start_index:]
     map_grid = []
     for line in map_lines:
-        map_row = [0 if char == '.' else 1 for char in line.strip()]
+        map_row = [0 if char in '.SE' else 1 for char in line.strip()]
         map_grid.extend(map_row)
 
     return map_grid, len(map_lines), len(map_lines[0].strip())
@@ -225,7 +225,7 @@ def get_test_env_and_targets_from_config_file(json_file_path) -> tuple[Env, list
     with open(json_file_path, 'r') as file:
         config = json.load(file)
 
-    map_grid, width, height = load_map(os.path.join(os.path.dirname(json_file_path), config['mapFile']))
+    map_grid, height, width = load_map(os.path.join(os.path.dirname(json_file_path), config['mapFile']))
     agents = load_agents(os.path.join(os.path.dirname(json_file_path), config['agentFile']))
     tasks = load_tasks(os.path.join(os.path.dirname(json_file_path), config['taskFile']))
 

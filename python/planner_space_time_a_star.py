@@ -1,9 +1,12 @@
+import collections
 import math
+import multiprocessing
 import os
 import random
 import time
+import traceback
 from copy import copy
-from typing import Tuple, Set, Optional
+from typing import Tuple, Set, Optional, Union, Any, List
 from queue import PriorityQueue
 
 from models import Action, BasePlanner, Heuristic, DetourPlannerPhase, AstarHighLevelPlannerType
@@ -12,11 +15,12 @@ from util import getManhattanDistance, get_neighbors, DistanceMap, get_valid_for
 
 
 class SpaceTimeAStarPlanner(BasePlanner):
-    debug_mode = True
+    debug_mode = False
     verbose = False
 
-    def __init__(self, pyenv=None, visualize=False, animate=False, replanning_period=8, time_horizon=10, restarts=False,
-                 heuristic: Heuristic = Heuristic.TRUE_DISTANCE, high_level_planner=AstarHighLevelPlannerType.PRIORITY) -> None:
+    def __init__(self, pyenv=None, visualize=False, animate=False, replanning_period=8, time_horizon=10, restarts=True,
+                 heuristic: Heuristic = Heuristic.TRUE_DISTANCE,
+                 high_level_planner=AstarHighLevelPlannerType.PRIORITY) -> None:
         super().__init__(pyenv, "Space-Time-A-Star-Planner")
         self.reservation: Set[Tuple[int, int, int]] = set()
         # (cell id 1, cell id 2, timestep relative to current timestep [one_based])
@@ -24,9 +28,10 @@ class SpaceTimeAStarPlanner(BasePlanner):
         # (cell id, -1, timestep [one_based]): robot id
         self.next_actions: list[list[int]]
         # next action for each robot
+        self.timeout_steps = 0
         self.last_planning_step = -math.inf
         self.distance_maps = {}  # in here we store the distance map for each target cell while ignoring robots
-
+        self.processing_times = collections.deque(maxlen=10)
         # load values from environment variables if present
         self.replanning_period = replanning_period
         if r := os.getenv("replanning_period"):
@@ -34,18 +39,34 @@ class SpaceTimeAStarPlanner(BasePlanner):
         self.time_horizon = time_horizon
         if t := os.getenv("time_horizon"):
             self.time_horizon = int(t)
+
         self.random_restarts = restarts
+
+        self.restart_count = None
         if r := os.getenv("restarts"):
-            self.random_restarts = r == "True"
+            self.restart_count = int(r)
+
+        self.shuffle_on_first_replan = False
+        if s := os.getenv("shuffleOnFirstReplan"):
+            self.shuffle_on_first_replan = s == "True"
+
         self.heuristic = heuristic
         if h := os.getenv("heuristic"):
             self.heuristic = h
+            print(f"set heuristic to {Heuristic(h)}")
         self.try_fix_waiting_robots = True
         if t := os.getenv("try_fix_waiting_robots"):
             self.try_fix_waiting_robots = t == "True"
         self.high_level_planner = high_level_planner
-        if h := os.getenv("high_level_planner"):
-            self.high_level_planner = h
+        if h := os.getenv("highLevelPlanner"):
+            if h == "PRIORITY":
+                self.high_level_planner = AstarHighLevelPlannerType.PRIORITY
+            elif h == "DETOUR":
+                self.high_level_planner = AstarHighLevelPlannerType.DETOUR
+            elif h == "PRIORITY_DETOUR":
+                self.high_level_planner = AstarHighLevelPlannerType.PRIORITY_DETOUR
+            else:
+                raise RuntimeError(f"unknown high level planner {h} of type {type(h)}")
 
         self.VISUALIZE = visualize
         if visualize:
@@ -55,7 +76,6 @@ class SpaceTimeAStarPlanner(BasePlanner):
         random.seed(42)
 
     def initialize(self, preprocess_time_limit: int):
-        print(f"time limit: {preprocess_time_limit}")
         # todo use initialization time to autotune parameters (replanning_period, time_horizon, try_fix_waiting_robots,
         #  parallelization, ...)
         # todo preprocess distance maps
@@ -66,11 +86,16 @@ class SpaceTimeAStarPlanner(BasePlanner):
             time_limit = None
         if self.last_planning_step + self.replanning_period <= self.env.curr_timestep:
             self.last_planning_step = self.env.curr_timestep
-            return self.plan_with_random_restarts(time_limit)
+            print(f"planning step {self.last_planning_step}")
+            try:
+                return self.plan_with_random_restarts(time_limit)
+            except Exception as e:
+                print(traceback.format_exc())
+                raise e
         else:
-            return self.next_actions[self.env.curr_timestep - self.last_planning_step]
+            return self.next_actions.pop(0)
 
-    def log(self,  msg: str, robot_id=None, level=0):
+    def log(self, msg: str, robot_id=None, level=0):
         if robot_id not in [None, 185, 130, 145]:
             return
         if self.verbose and level == 0:
@@ -79,20 +104,62 @@ class SpaceTimeAStarPlanner(BasePlanner):
                 return
             print(f"{robot_id:03} {msg}")
 
-    def plan_with_random_restarts(self, time_limit: Optional[int] = None, time_buffer=0) -> list[int]:
+    def call_low_level_planner(self, iteration=0, time_limit=None, priority_order=None) -> Union[
+        tuple[Any, float], tuple[list[int], int, int, list[int]]]:
+        """
+        call the low level planner
+        :param iteration: iteration count
+        :param time_limit: time limit in seconds
+        :param priority_order: priority order of robots
+        :return: actions, path_length_sum, number of waiting_robots, waiting_robot_ids, processing_time
+        """
+        start = time.time()
+        if self.high_level_planner == AstarHighLevelPlannerType.PRIORITY_DETOUR:
+            if iteration % 2 == 0:
+                return *self.priority_planner(time_limit, priority_order), time.time() - start
+            else:
+                return *self.detour_planner(
+                    time_limit,
+                    priority_order), time.time() - start
+
+        if self.high_level_planner == AstarHighLevelPlannerType.PRIORITY:
+            return *self.priority_planner(
+                time_limit,
+                priority_order), time.time() - start
+        elif self.high_level_planner == AstarHighLevelPlannerType.DETOUR:
+            return *self.detour_planner(
+                time_limit,
+                priority_order), time.time() - start
+        else:
+            raise RuntimeError(
+                f"unknown high level planner {self.high_level_planner} of type {type(self.high_level_planner)}")
+
+    def precompute_heuristic_values(self):
+        # precompute heuristic values for all start - end combinations of all robots
+        # use multiprocessing to speed up
+        start_end_combinations = []
+        for robot_id in range(self.env.num_of_agents):
+            for goal in self.env.goal_locations[robot_id]:
+                start_end_combinations.append((self.env, self.env.curr_states[robot_id].location,
+                                               self.env.curr_states[robot_id].orientation, goal[0]))
+        with multiprocessing.Pool() as pool:
+            results = pool.starmap(get_precomputed_distance_map, start_end_combinations)
+        for d_map in results:
+            self.distance_maps[d_map.target] = d_map
+        print(self.distance_maps)
+
+    def plan_with_random_restarts(self, time_limit: Optional[int] = None, time_margin_factor=2) -> list[int]:
+        # self.precompute_heuristic_values()
         start = time.time()
         num_of_robots = self.env.num_of_agents
-        priority_order = tuple(range(num_of_robots))
-        if self.high_level_planner == AstarHighLevelPlannerType.PRIORITY:
-            first_solution, path_length_sum, waiting_robots_count, waiting_robot_ids = self.priority_planner(
-                time_limit,
-                priority_order)
-        elif self.high_level_planner == AstarHighLevelPlannerType.PRIORITY_DETOUR:
-            first_solution, path_length_sum, waiting_robots_count, waiting_robot_ids = self.detour_planner(
-                time_limit,
-                priority_order)
+        if self.shuffle_on_first_replan:
+            priority_order = list(range(num_of_robots))
+            random.shuffle(priority_order)
+            priority_order = tuple(priority_order)
         else:
-            raise RuntimeError(f"unknown high level planner {self.high_level_planner}")
+            priority_order = tuple(range(num_of_robots))
+        first_solution, path_length_sum, waiting_robots_count, waiting_robot_ids, processing_time = self.call_low_level_planner(
+            0, time_limit, priority_order)
 
         if not self.random_restarts:
             return first_solution
@@ -106,40 +173,41 @@ class SpaceTimeAStarPlanner(BasePlanner):
         # todo: maybe prioritize
         #  - the robots that had collisions in the last planning step
         #  - the robots that are closest to their goal
-        number_of_restarts = 10
-        number_of_restarts = min(number_of_restarts, math.factorial(num_of_robots) - 1)
+        number_of_restarts = self.restart_count - 1
+        # number_of_restarts = min(number_of_restarts, math.factorial(num_of_robots) - 1)
         iteration_count = 0
         # todo: parallelize
         last_step_was_fix_step = False
         while True:
             iteration_count += 1
             self.log(f"iteration {iteration_count}___________________________________________________________")
-            if time_limit:
-                if (time.time() - start) + time_buffer >= time_limit:
-                    break
-            if not time_limit:
-                if iteration_count > number_of_restarts:
-                    break
+            if time_limit and len(self.processing_times) > 0 and (time.time() - start) + max(
+                    self.processing_times) * time_margin_factor >= time_limit:
+                break
+            elif iteration_count > number_of_restarts:
+                break
             try_to_fix_waiting_robots = self.try_fix_waiting_robots and not last_step_was_fix_step
             if try_to_fix_waiting_robots:
+                iteration_count -= 1  # do not count fix steps - this would mess up the alternating priority_detour type
                 _, new_path_length_sum, waiting_robots_count, waiting_robot_ids = self.priority_planner(
                     time_limit,
                     priority_order,
                     try_fix_stuck_robots=waiting_robot_ids)
                 last_step_was_fix_step = True  # makes sure fix is only tried once per priority order
             else:
-                last_step_was_fix_step = False
                 while True:
                     new_priority_order = list(priority_order)
-                    random.shuffle(new_priority_order)
+                    random.shuffle(
+                        new_priority_order)  # todo instead of random try to switch robots that had collisions in the last planning step
                     new_priority_order = tuple(new_priority_order)
                     if new_priority_order not in tried_priority_orders:
                         priority_order = new_priority_order
                         tried_priority_orders.add(priority_order)
                         break
-                _, new_path_length_sum, waiting_robots_count, waiting_robot_ids = self.priority_planner(
-                    time_limit,
-                    priority_order)
+                _, new_path_length_sum, waiting_robots_count, waiting_robot_ids, processing_time = self.call_low_level_planner(
+                    iteration_count, time_limit, priority_order)
+                self.processing_times.append(processing_time)
+                last_step_was_fix_step = False
             if waiting_robots_count < min_waiting_robots or (
                     waiting_robots_count == min_waiting_robots and new_path_length_sum < min_path_length_sum):
                 min_waiting_robots = waiting_robots_count
@@ -149,11 +217,12 @@ class SpaceTimeAStarPlanner(BasePlanner):
                 if self.verbose:
                     best_iteration = iteration_count
         self.next_actions = best_next_actions
+        next = self.next_actions.pop(0)
+        print(f"iteration count: {iteration_count}")
         if self.debug_mode:
-            print(f"iteration count: {iteration_count}")
             print(f"best actions through fix step: {got_best_actions_through_fix_step}")
             self.log("best iteration: " + str(best_iteration))
-        return best_next_actions[0]
+        return next
         # todo how to determine the best solution? ideas:
         #  lowest sum of path lengths, lowest number of waiting robots, lowest sum of h values
         #  (caution: when an agent reaches its goal, he will get a new target with a new bigger h)
@@ -452,7 +521,8 @@ class SpaceTimeAStarPlanner(BasePlanner):
                             continue
                         else:
                             self.log(f"found better path", robot_id)
-                    revoked_reservations = self.revoke_all_reservations_of_robot(robot_id)  # cancel the waiting position
+                    revoked_reservations = self.revoke_all_reservations_of_robot(
+                        robot_id)  # cancel the waiting position
                     try:
                         last_loc = self.env.curr_states[robot_id].location
                         self.reserve_path_if_possible(last_loc, path, robot_id)
@@ -477,7 +547,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
                 phase_count = 0
             elif phase == DetourPlannerPhase.IMPROVE and found_paths == 0:
                 break
-        #for robot_id in range(self.env.num_of_agents):
+        # for robot_id in range(self.env.num_of_agents):
         #    reservations = [r for r in self.reservation if self.edge_hash_to_robot_id[r] == robot_id and r[1] == -1]
         #    sorted_reservations = sorted(reservations, key=lambda r: r[2])
         #    sorted_reservations = [convert_1d_to_2d_coordinate(r[0], self.env.cols) for r in sorted_reservations]
@@ -637,3 +707,16 @@ class SpaceTimeAStarPlanner(BasePlanner):
                 self.reservation.remove(edge_hash)
                 del self.edge_hash_to_robot_id[edge_hash]
         return revoked_reservations
+
+
+def get_precomputed_distance_map(env: any, start: int, start_orientation: int, end: int) -> DistanceMap:
+    """
+    get the precomputed distance map for the given end cell
+    :param start_orientation: orientation of the robot
+    :param start: start cell index
+    :param end: end cell index
+    :return: the distance map
+    """
+    distance_map = DistanceMap(end, env)
+    distance_map.get_distance(env, start, start_orientation)
+    return distance_map

@@ -15,7 +15,8 @@ class DetourPlannerPhase(Enum):
 
 class AstarHighLevelPlannerType(Enum):
     PRIORITY = 0
-    PRIORITY_DETOUR = 1
+    DETOUR = 1
+    PRIORITY_DETOUR = 2
 
 
 class Action(Enum):
