@@ -29,7 +29,7 @@ def plot_distance_map(distances: list[Optional[int]], env: Env):
 
     grid_array = np.array([[np.nan if x is None else x for x in row] for row in grid])
 
-    plt.figure(figsize=(8, 8))
+    plt.figure(figsize=(env.cols * 0.35, env.rows * 0.3))
     cmap = plt.cm.viridis
     cmap.set_under('black')  # Set color for obstacles
     plt.imshow(grid_array, cmap=cmap, interpolation='nearest', vmin=0)
@@ -52,32 +52,49 @@ def plot_distance_map(distances: list[Optional[int]], env: Env):
 
 
 class UtilTest(unittest.TestCase):
-    def test_distance_map(self):
-        map = [
-            [1, 0, 1, 1, 1, 0, 0],
-            [1, 0, 0, 0, 0, 0, 0],
-            [0, 0, 1, 0, 1, 0, 0],
-            [1, 0, 0, 0, 0, 0, 0],
-            [1, 1, 1, 0, 1, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0],
+    def get_huge_map(self):
+        grid = [  # 0 - empty; 1 - wall; "<i><o>" i - robot nr (has to be bigger than 0) o - orientation (<>v^)
+            [0, 0, 0, 0, 0, 0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, "1>", 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0000, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
         ]
-        env = grids_to_env(map, [])
-        target = convert_2d_to_1d_coordinate((1, 0), env.cols)
+        return grids_to_env(grid, [])
+    def test_distance_map(self):
+        #map = [
+        #    [1, 0, 1, 1, 1, 0, 0],
+        #    [1, 0, 0, 0, 0, 0, 0],
+        #    [0, 0, 1, 0, 1, 0, 0],
+        #    [1, 0, 0, 0, 0, 0, 0],
+        #    [1, 1, 1, 0, 1, 0, 0],
+        #    [0, 0, 0, 0, 0, 0, 0],
+        #    [0, 0, 0, 0, 0, 0, 0],
+        #    [0, 0, 0, 0, 0, 0, 0],
+        #    [0, 0, 0, 0, 0, 0, 0],
+        #    [0, 0, 0, 0, 0, 0, 0],
+        #]
+        #env = grids_to_env(map, [])
+        env = self.get_huge_map()
+        target = convert_2d_to_1d_coordinate((13, 5), env.cols)
         distance_map = DistanceMap(target, env)
         self.assertEqual(
             distance_map.get_distance(env,
-                                      convert_2d_to_1d_coordinate((1, 1), env.cols),
+                                      convert_2d_to_1d_coordinate((14, 5), env.cols),
                                       Orientation.NORTH.value),
-            1)
+            2)
         plot_distance_map(distance_map.distance_map, env)
 
         self.assertEqual(
             distance_map.get_distance(env,
-                                      convert_2d_to_1d_coordinate((1, 2), env.cols),
+                                      convert_2d_to_1d_coordinate((5, 2), env.cols),
                                       Orientation.EAST.value),
             3)
         plot_distance_map(distance_map.distance_map, env)
@@ -102,6 +119,19 @@ class UtilTest(unittest.TestCase):
         # y - axis: tasks completed
         # each line represents a config
         # save the chart as a file
+
+    def test_create_plots(self):
+        env = self.get_huge_map()
+        target = convert_2d_to_1d_coordinate((14, 9), env.cols)
+        distance_map = DistanceMap(target, env)
+        distance_map.get_distance(env,
+                                  convert_2d_to_1d_coordinate((15, 9), env.cols),
+                                  Orientation.WEST.value)
+        plot_distance_map(distance_map.distance_map, env)
+        distance_map.get_distance(env,
+                                  convert_2d_to_1d_coordinate((5, 2), env.cols),
+                                  Orientation.NORTH.value)
+        plot_distance_map(distance_map.distance_map, env)
 
 
     def test_generate_visualization_for_benchmark_tool_with_range(self):

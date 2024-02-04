@@ -126,7 +126,7 @@ def print_grid(env: Env, include_robots=True):
         print(horizontal_line)
 
 
-def animate_grid(envs: list, filename='lifelong_animation.gif', interval=200):
+def animate_grid(envs: list, filename='lifelong_animation.gif', interval=200, additional_name=""):
     grid_size = (envs[0].rows, envs[0].cols)
     orientation_symbols = ['→', '↓', '←', '↑']
     colors = cycle(['red', 'green', 'blue', 'orange', 'purple', 'cyan', 'magenta', 'yellow'])
@@ -185,7 +185,7 @@ def animate_grid(envs: list, filename='lifelong_animation.gif', interval=200):
     anim = FuncAnimation(fig, update, frames=len(envs), interval=interval, blit=True)
 
     # Save the animation as a GIF
-    anim.save(f"{envs[0].map_name}_{filename}", writer='pillow')
+    anim.save(f"{envs[0].map_name}_{filename}_{additional_name}.gif", writer='pillow')
     plt.close()
 
 

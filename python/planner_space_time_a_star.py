@@ -162,7 +162,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
             0, time_limit, priority_order)
 
         if not self.random_restarts:
-            return first_solution
+            return self.next_actions.pop(0)
 
         tried_priority_orders = {priority_order}
         min_waiting_robots = waiting_robots_count
@@ -173,7 +173,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
         # todo: maybe prioritize
         #  - the robots that had collisions in the last planning step
         #  - the robots that are closest to their goal
-        number_of_restarts = self.restart_count - 1
+        number_of_restarts = None if self.restart_count is None else self.restart_count - 1
         # number_of_restarts = min(number_of_restarts, math.factorial(num_of_robots) - 1)
         iteration_count = 0
         # todo: parallelize
@@ -184,7 +184,7 @@ class SpaceTimeAStarPlanner(BasePlanner):
             if time_limit and len(self.processing_times) > 0 and (time.time() - start) + max(
                     self.processing_times) * time_margin_factor >= time_limit:
                 break
-            elif iteration_count > number_of_restarts:
+            elif number_of_restarts and iteration_count > number_of_restarts:
                 break
             try_to_fix_waiting_robots = self.try_fix_waiting_robots and not last_step_was_fix_step
             if try_to_fix_waiting_robots:
