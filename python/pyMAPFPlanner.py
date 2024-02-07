@@ -9,7 +9,7 @@ import MAPF  # has to be there for the c++ application to work
 class pyMAPFPlanner:  # this is the wrapper class that will be called by the c++ application
     planner: BasePlanner  # your planner should inherit from BasePlanner
 
-    def __init__(self, pyenv=None, desired_planner="astar") -> None:
+    def __init__(self, pyenv=None, desired_planner=None) -> None:
         if desired_planner is None:
             desired_planner = os.getenv("PLANNER")  # read the environment variable to determine which planner to use
         if desired_planner == "astar":
